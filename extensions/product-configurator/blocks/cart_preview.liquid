@@ -1,0 +1,84 @@
+{%- comment -%}
+  Renders customization preview images on the cart page.
+  Place this block inside the Cart section via the theme editor.
+{%- endcomment -%}
+
+{%- assign has_previews = false -%}
+{%- for item in cart.line_items -%}
+  {%- if item.properties['Preview Image'] != blank -%}
+    {%- assign has_previews = true -%}
+    {%- break -%}
+  {%- endif -%}
+{%- endfor -%}
+
+{%- if has_previews -%}
+
+<div id="configurator-preview-data" style="display:none">
+  {%- for item in cart.line_items -%}
+    {%- assign preview = item.properties['Preview Image'] -%}
+    {%- if preview != blank -%}
+      <span data-item-key="{{ item.key }}" data-preview="{{ preview | escape }}"></span>
+    {%- endif -%}
+  {%- endfor -%}
+</div>
+
+<script>
+(function () {
+  function injectPreviews() {
+    var nodes = document.querySelectorAll('#configurator-preview-data [data-item-key]');
+    nodes.forEach(function (node) {
+      var key  = node.dataset.itemKey;
+      var url  = node.dataset.preview;
+      if (!url) return;
+
+      // Try common theme selectors for a cart line-item row
+      var row = document.querySelector(
+        '[data-cart-item-key="' + key + '"], ' +
+        '[data-key="' + key + '"], ' +
+        'tr[data-cart-item="' + key + '"], ' +
+        '[data-line-item-key="' + key + '"]'
+      );
+
+      if (row) {
+        // Replace the existing product image if one exists
+        var existingImg = row.querySelector('img');
+        if (existingImg) {
+          existingImg.src = url;
+          existingImg.srcset = '';
+          existingImg.alt = 'Your customization';
+          return;
+        }
+      }
+
+      // Fallback: inject a small thumbnail before the item title
+      var title = document.querySelector(
+        '[data-cart-item-key="' + key + '"] .cart-item__name,' +
+        '[data-key="' + key + '"] .cart-item__name'
+      );
+      if (title) {
+        var img = document.createElement('img');
+        img.src = url;
+        img.alt = 'Your customization';
+        img.style.cssText = 'width:72px;height:72px;object-fit:contain;border-radius:6px;display:block;margin-bottom:6px;border:1px solid #e5e7eb;';
+        title.parentNode.insertBefore(img, title);
+      }
+    });
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', injectPreviews);
+  } else {
+    injectPreviews();
+  }
+})();
+</script>
+
+{%- endif -%}
+
+{% schema %}
+{
+  "name": "Cart Preview Images",
+  "target": "section",
+  "settings": []
+}
+{% endschema %}

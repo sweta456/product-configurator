@@ -264,8 +264,8 @@ export default function StorefrontConfiguratorPage() {
           const data = await resp.json();
           if (data.url) {
             previewUrl = window.location.origin + data.url;
-            // _preview is underscore-prefixed: visible to merchant in orders, hidden from customer in cart
-            properties["_preview"] = previewUrl;
+            properties["Preview Image"] = previewUrl; // visible in cart + customer email
+            properties["_preview"] = previewUrl;      // visible in admin orders
           }
         } catch {
           // Non-fatal — order still goes through, just without the image link

@@ -136,8 +136,7 @@
       })
       .then(function () {
         closeModal();
-        // Go directly to cart — guaranteed to show the current cart state
-        window.location.href = '{{ routes.cart_url }}';
+        window.location.href = '/cart?_=' + Date.now();
       })
       .catch(function (err) { alert(err.message); });
   });
