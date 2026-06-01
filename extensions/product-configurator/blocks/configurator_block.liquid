@@ -1,0 +1,194 @@
+{%- liquid
+  assign base_url = block.settings.app_url_override | strip
+  if base_url == blank
+    assign base_url = app.url
+  endif
+
+  assign configurator_url = ''
+  if base_url != blank and product
+    assign configurator_url = base_url | append: '/configurator/' | append: product.id | append: '?shop=' | append: shop.permanent_domain
+  endif
+-%}
+
+{%- if product == blank -%}
+  <div style="padding:14px 16px;border:2px dashed #f59e0b;border-radius:8px;background:#fffbeb;font-family:sans-serif;">
+    <p style="margin:0;font-size:13px;font-weight:600;color:#92400e;">⚠️ Wrong section</p>
+    <p style="margin:4px 0 0;font-size:12px;color:#78350f;">This block must be placed inside a Product page section, not a general page.</p>
+  </div>
+{%- elsif product.tags contains 'configurator-enabled' -%}
+  {%- if configurator_url == blank -%}
+  <div style="padding:14px 16px;border:2px dashed #ef4444;border-radius:8px;background:#fef2f2;font-family:sans-serif;">
+    <p style="margin:0;font-size:13px;font-weight:600;color:#991b1b;">⚠️ App not connected</p>
+    <p style="margin:4px 0 0;font-size:12px;color:#7f1d1d;">Enter your app URL in the <strong>App URL Override</strong> field in this block's settings panel (e.g. <code>https://your-ngrok-url.ngrok-free.app</code>).</p>
+  </div>
+  {%- else -%}
+
+<div
+  id="product-configurator-{{ product.id }}"
+  data-url="{{ configurator_url }}"
+>
+  <!-- ── Customize Button ─────────────────────────────────────── -->
+  <button
+    id="open-configurator-{{ product.id }}"
+    type="button"
+    style="
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 14px 28px;
+      background: {{ block.settings.button_color }};
+      color: {{ block.settings.button_text_color }};
+      border: none;
+      border-radius: 8px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      letter-spacing: 0.01em;
+      {% if block.settings.full_width %}width: 100%;{% endif %}
+      box-sizing: border-box;
+    "
+  >
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <circle cx="13.5" cy="6.5" r="2.5"/>
+      <path d="M14.622 17.897L19.5 12.5 20 7l-5.5.5-4.897 4.878M8.891 12.84 4.5 17.5l-1 3.5 3.5-1 4.66-4.391"/>
+    </svg>
+    {{ block.settings.button_text }}
+  </button>
+
+  <!-- ── Modal Overlay ────────────────────────────────────────── -->
+  <div id="configurator-modal-{{ product.id }}" style="display: none; position: fixed; inset: 0; z-index: 9999; background: rgba(0,0,0,0.55); align-items: center; justify-content: center;">
+    <div style="position: relative; width: min(960px, 96vw); height: min(720px, 92vh); background: #fff; border-radius: 12px; overflow: hidden; box-shadow: 0 20px 60px rgba(0,0,0,0.35); display: flex; flex-direction: column;">
+
+      <div style="display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; border-bottom: 1px solid #e5e7eb; flex-shrink: 0;">
+        <span style="font-weight: 700; font-size: 15px;">Customise Your {{ product.title }}</span>
+        <button id="close-configurator-{{ product.id }}" type="button" style="background: none; border: none; font-size: 22px; cursor: pointer; color: #6b7280; line-height: 1; padding: 2px 6px;" aria-label="Close">&times;</button>
+      </div>
+
+      <iframe id="configurator-iframe-{{ product.id }}" src="about:blank" data-src="{{ configurator_url }}" style="flex: 1; border: none; display: block;" title="Product Configurator" allow="clipboard-write"></iframe>
+    </div>
+  </div>
+
+</div>
+
+<script>
+(function () {
+  var productId  = '{{ product.id }}';
+  var configUrl  = '{{ configurator_url }}';
+  var hideATC    = {{ block.settings.hide_buy_buttons | json }};
+
+  var openBtn  = document.getElementById('open-configurator-'  + productId);
+  var modal    = document.getElementById('configurator-modal-' + productId);
+  var closeBtn = document.getElementById('close-configurator-' + productId);
+  var iframe   = document.getElementById('configurator-iframe-'+ productId);
+
+  if (!openBtn || !modal) return;
+
+  if (hideATC) {
+    ['.product-form__buttons', '.shopify-payment-button', '.product-form [type="submit"]',
+     'form[action="/cart/add"] .btn', 'form[action="/cart/add"] button[type="submit"]']
+      .forEach(function (sel) {
+        document.querySelectorAll(sel).forEach(function (el) { el.style.display = 'none'; });
+      });
+  }
+
+  function getVariantId() {
+    var form = document.querySelector('form[action*="/cart/add"]');
+    if (form) {
+      var input = form.querySelector('input[name="id"]');
+      if (input && input.value) return parseInt(input.value, 10);
+    }
+    return {{ product.selected_or_first_available_variant.id | default: 0 }};
+  }
+
+  function openModal() {
+    if (iframe.src === 'about:blank' || !iframe.src || iframe.src === window.location.href) {
+      iframe.src = configUrl;
+    }
+    modal.style.display = 'flex';
+    document.body.style.overflow = 'hidden';
+  }
+
+  function closeModal() {
+    modal.style.display = 'none';
+    document.body.style.overflow = '';
+  }
+
+  openBtn.addEventListener('click', openModal);
+  closeBtn.addEventListener('click', closeModal);
+  modal.addEventListener('click', function (e) { if (e.target === modal) closeModal(); });
+  document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && modal.style.display !== 'none') closeModal(); });
+
+  window.addEventListener('message', function (event) {
+    if (!event.data || event.data.type !== 'configurator:add-to-cart') return;
+
+    var properties = event.data.properties || {};
+    var variantId  = getVariantId();
+
+    if (!variantId) { console.error('Configurator: no variant ID'); return; }
+
+    fetch('/cart/add.js', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ items: [{ id: variantId, quantity: 1, properties: properties }] })
+    })
+      .then(function (res) {
+        return res.ok ? res.json() : res.json().then(function (e) { throw new Error(e.description || 'Could not add to cart'); });
+      })
+      .then(function () {
+        closeModal();
+        // Go directly to cart — guaranteed to show the current cart state
+        window.location.href = '{{ routes.cart_url }}';
+      })
+      .catch(function (err) { alert(err.message); });
+  });
+})();
+</script>
+
+  {%- endif -%}
+{%- endif -%}
+
+{% schema %}
+{
+  "name": "Product Configurator",
+  "target": "section",
+  "settings": [
+    {
+      "type": "text",
+      "id": "button_text",
+      "label": "Button Label",
+      "default": "Customize This Product"
+    },
+    {
+      "type": "color",
+      "id": "button_color",
+      "label": "Button Colour",
+      "default": "#111827"
+    },
+    {
+      "type": "color",
+      "id": "button_text_color",
+      "label": "Button Text Colour",
+      "default": "#ffffff"
+    },
+    {
+      "type": "checkbox",
+      "id": "full_width",
+      "label": "Full-width Button",
+      "default": true
+    },
+    {
+      "type": "checkbox",
+      "id": "hide_buy_buttons",
+      "label": "Hide standard Add to Cart & Buy it now",
+      "info": "Enable this for products that must be customized before purchase.",
+      "default": true
+    },
+    {
+      "type": "text",
+      "id": "app_url_override",
+      "label": "App URL Override",
+      "info": "Paste your app URL here (e.g. https://xxxx.ngrok-free.app). Required during development. Leave blank in production once the app is deployed."
+    }
+  ]
+}
+{% endschema %}
