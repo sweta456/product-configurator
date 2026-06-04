@@ -1,22 +1,58 @@
+export interface LayerAnswer {
+  id: string;
+  label: string;
+  value?: string;
+  imageUrl?: string;
+  viewImages?: (string | null)[];
+  thumbnailUrl?: string;
+  description?: string;
+  productionCode?: string;
+  fontSize?: number;
+  outlineSize?: number;
+  outlineColor?: string;
+}
+
 export interface LayerConfig {
   id: string;
   name: string;
   type: "static" | "colorable";
   src: string;
+  displayType?: string;
+  answers?: LayerAnswer[];
+  applyOn?: string[];
   extraViews?: string[];
   defaultColor?: string;
 }
 
-/** Returns the image URL for a given view index (0-based). Falls back to src. */
-export function getLayerSrc(layer: LayerConfig, viewIndex: number): string {
+/** Returns the image URL for a given view index (0-based). Falls back gracefully. */
+export function getLayerSrc(layer: LayerConfig, viewIndex: number, answerIdx = 0): string {
+  // Answer-based layers store per-view images in answers[].viewImages[], not src/extraViews
+  if (!layer.src && layer.answers?.length) {
+    const answer = layer.answers[answerIdx] ?? layer.answers[0];
+    if (answer?.viewImages?.length) {
+      const slot = answer.viewImages[viewIndex];
+      // Only fall back when slot was never uploaded (null/undefined), not when empty-string
+      if (slot != null && slot !== "") return slot;
+      return answer.viewImages.find((v) => v != null && v !== "") ?? "";
+    }
+    return "";
+  }
   if (viewIndex === 0 || !layer.extraViews) return layer.src;
-  return layer.extraViews[viewIndex - 1] || layer.src;
+  // Old-style: fall back to primary src only when the slot was never set (not just empty)
+  const extraSlot = layer.extraViews[viewIndex - 1];
+  return (extraSlot != null && extraSlot !== "") ? extraSlot : layer.src;
 }
 
 export interface ColorSwatch {
   value: string;
   label: string;
   imageUrl?: string;
+  viewImages?: (string | null)[];
+  description?: string;
+  productionCode?: string;
+  lighting?: boolean;
+  lightingBrightness?: number;
+  lightingIntensity?: number;
 }
 
 export type Condition = { questionId: string; value: string };
@@ -25,7 +61,8 @@ export interface ColorQuestion {
   id: string;
   name: string;
   type: "color";
-  linkedLayerId: string;
+  displayType?: "none" | "color" | "text-color";
+  linkedLayerId?: string;
   swatches: ColorSwatch[];
   conditions?: Condition[];
 }
@@ -34,38 +71,81 @@ export interface ThumbnailQuestion {
   id: string;
   name: string;
   type: "thumbnail";
+  displayType?: "image" | "color" | "none";
   linkedLayerId?: string;
   swatches: ColorSwatch[];
   conditions?: Condition[];
+  multipleSelection?: boolean;
+  largeThumbnail?: boolean;
+  showNameLabel?: boolean;
+  applyOn?: string[];
 }
 
 export interface TextQuestion {
   id: string;
   name: string;
   type: "text";
+  displayType?: "none" | "text";
   defaultText: string;
   defaultColor: string;
   defaultFontSize: number;
   defaultFontFamily: string;
   position: { x: number; y: number };
+  rotation?: number;
+  printAreaId?: string;
   conditions?: Condition[];
+}
+
+export interface PrintArea {
+  id: string;
+  name: string;
+  customerEditingView: number;
+  dpi: number;
+  units: "in" | "cm" | "px";
+  width: number;
+  height: number;
+  bleedArea: number;
+  showQualityIndicator: boolean;
+  safeAreaWidth: number;
+  safeAreaHeight: number;
+  outlineColor: string;
+  showOutline: boolean;
+  clipToLayerId?: string;
+  visibleViews: number[];
+  x: number;
+  y: number;
 }
 
 export interface FileQuestion {
   id: string;
   name: string;
   type: "file";
+  displayType?: "none" | "logo";
   position: { x: number; y: number };
   defaultWidth: number;
   defaultHeight: number;
+  printAreas?: PrintArea[];
+  allowedTransforms?: { move: boolean; resize: boolean; rotate: boolean };
   conditions?: Condition[];
+}
+
+export interface DropdownOption {
+  value: string;
+  label: string;
+  imageUrl?: string;
+  viewImages?: (string | null)[];
+  thumbnailUrl?: string;
+  description?: string;
+  productionCode?: string;
 }
 
 export interface DropdownQuestion {
   id: string;
   name: string;
   type: "dropdown";
-  options: { value: string; label: string }[];
+  displayType?: "none" | "image";
+  multipleSelection?: boolean;
+  options: DropdownOption[];
   defaultValue?: string;
   conditions?: Condition[];
 }
@@ -89,11 +169,23 @@ export interface CheckboxQuestion {
   conditions?: Condition[];
 }
 
+export interface LabelAnswer {
+  value: string;
+  label: string;
+  imageUrl?: string;
+  viewImages?: (string | null)[];
+  description?: string;
+  productionCode?: string;
+}
+
 export interface LabelQuestion {
   id: string;
   name: string;
   type: "label";
   content: string;
+  answers?: LabelAnswer[];
+  displayType?: string;
+  multipleSelection?: boolean;
   conditions?: Condition[];
 }
 
@@ -102,6 +194,14 @@ export interface GroupQuestion {
   name: string;
   type: "group";
   childIds: string[];
+  conditions?: Condition[];
+}
+
+export interface NoneQuestion {
+  id: string;
+  name: string;
+  type: "none";
+  displayType?: string;
   conditions?: Condition[];
 }
 
@@ -114,20 +214,37 @@ export type Question =
   | RadioQuestion
   | CheckboxQuestion
   | LabelQuestion
-  | GroupQuestion;
+  | GroupQuestion
+  | NoneQuestion;
 
 export type InputType = Question["type"];
 
+const ALL_DISPLAY_TYPES = ["none", "image", "color", "logo", "text", "font", "font-size", "text-color", "text-outline"] as const;
+const VISUAL_DISPLAY_TYPES = ["image", "color", "logo", "text", "font", "font-size", "text-color", "text-outline"] as const;
+
 export const DISPLAY_TYPE_MAP: Record<InputType, string[]> = {
-  thumbnail: ["color", "image"],
-  color: ["color"],
-  text: ["text", "font", "font-size", "text-color", "text-outline"],
-  file: ["logo", "image"],
-  dropdown: ["none"],
-  radio: ["none"],
-  checkbox: ["none"],
-  label: ["none"],
-  group: ["none"],
+  thumbnail: [...ALL_DISPLAY_TYPES],
+  color:     ["none", "color", "text-color"],
+  text:      ["none", "text"],
+  file:      ["none", "logo"],
+  dropdown:  [...ALL_DISPLAY_TYPES],
+  radio:     [...ALL_DISPLAY_TYPES],
+  checkbox:  [...ALL_DISPLAY_TYPES],
+  label:     [...ALL_DISPLAY_TYPES],
+  group:     ["none"],
+  none:      [...VISUAL_DISPLAY_TYPES],
+};
+
+export const DISPLAY_TYPE_META: Record<string, { label: string; icon: string; desc?: string }> = {
+  none:         { label: "None",         icon: "⊘",  desc: "Not shown on product" },
+  image:        { label: "Image",        icon: "🏔" },
+  color:        { label: "Color",        icon: "💧" },
+  logo:         { label: "Logo",         icon: "⭐" },
+  text:         { label: "Text",         icon: "T"  },
+  font:         { label: "Font",         icon: "F"  },
+  "font-size":  { label: "Font size",    icon: "↕"  },
+  "text-color": { label: "Text color",   icon: "A"  },
+  "text-outline":{ label: "Text outline", icon: "Ā" },
 };
 
 export const INPUT_TYPE_LABELS: Record<InputType, string> = {
@@ -140,6 +257,7 @@ export const INPUT_TYPE_LABELS: Record<InputType, string> = {
   checkbox: "Checkbox",
   color: "Color picker",
   group: "Group",
+  none: "None",
 };
 
 export interface ConfigOptions {

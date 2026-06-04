@@ -1,5 +1,4 @@
-import { useActionData, Link, useNavigation, useNavigate } from "react-router";
-import { useEffect } from "react";
+import { useActionData, Link, useNavigation, Form, redirect } from "react-router";
 import { authenticate } from "../shopify.server";
 
 // ─── Action ───────────────────────────────────────────────────────────────────
@@ -94,7 +93,7 @@ export async function action({ request }: any) {
     }
   }
 
-  return { productId: product.id };
+  return redirect(`/app/configurator-setup/${encodeURIComponent(product.id)}`);
 }
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
@@ -102,14 +101,7 @@ export async function action({ request }: any) {
 export default function CreateProductPage() {
   const actionData = useActionData() as any;
   const navigation = useNavigation();
-  const navigate = useNavigate();
   const saving = navigation.state === "submitting";
-
-  useEffect(() => {
-    if (actionData?.productId) {
-      navigate(`/app/configurator-setup/${encodeURIComponent(actionData.productId)}`);
-    }
-  }, [actionData?.productId]);
 
   const field: React.CSSProperties = {
     display: "block", width: "100%", padding: "11px 14px",
@@ -139,7 +131,7 @@ export default function CreateProductPage() {
           </div>
         )}
 
-        <form method="post">
+        <Form method="post">
           <div style={{ marginBottom: 18 }}>
             <label htmlFor="title" style={label}>Product Name *</label>
             <input id="title" name="title" type="text" required placeholder="e.g. Custom Baseball Bat" style={field} />
@@ -175,7 +167,7 @@ export default function CreateProductPage() {
           >
             {saving ? "Creating product…" : "Create & Open Builder →"}
           </button>
-        </form>
+        </Form>
 
         <p style={{ margin: "16px 0 0", fontSize: 12, color: "#9ca3af", textAlign: "center", lineHeight: 1.5 }}>
           Product is published as <strong>Active</strong> with stock set.

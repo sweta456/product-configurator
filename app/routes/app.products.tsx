@@ -1,4 +1,5 @@
 import { useLoaderData, Link, useFetcher } from "react-router";
+import { useState } from "react";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import type { LayerConfig } from "../types/configurator";
@@ -60,12 +61,50 @@ export async function loader({ request }: any) {
 // ─── Action — publish/unpublish a product ─────────────────────────────────────
 
 export async function action({ request }: any) {
-  const { admin } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
   const formData = await request.formData();
   const productId = formData.get("productId") as string;
+  const intent = (formData.get("intent") as string) || "publish";
+
+  // Delete config
+  if (intent === "delete") {
+    await prisma.productConfig.deleteMany({ where: { productId } });
+    return { success: true, deleted: true };
+  }
+
+  // Duplicate config
+  if (intent === "duplicate") {
+    const src = await prisma.productConfig.findUnique({ where: { productId } });
+    if (!src) return { error: "Config not found" };
+    // Create a Shopify product copy via GraphQL
+    const copyResp = await admin.graphql(
+      `mutation ProductDuplicate($productId: ID!, $newTitle: String!) {
+        productDuplicate(productId: $productId, newTitle: $newTitle) {
+          newProduct { id title }
+          userErrors { field message }
+        }
+      }`,
+      { variables: { productId, newTitle: `${src.productName} (copy)` } },
+    );
+    const copyData = await copyResp.json();
+    const newProduct = copyData.data?.productDuplicate?.newProduct;
+    if (!newProduct) return { error: copyData.data?.productDuplicate?.userErrors?.[0]?.message ?? "Duplicate failed" };
+    await prisma.productConfig.create({
+      data: {
+        productId: newProduct.id,
+        productName: newProduct.title,
+        shop: src.shop,
+        layers: src.layers as any,
+        options: src.options as any,
+      },
+    });
+    return { success: true, duplicated: true };
+  }
+
   const newStatus = formData.get("status") as "ACTIVE" | "DRAFT";
 
-  const resp = await admin.graphql(
+  // Step 1: set ACTIVE / DRAFT status via GraphQL (uses write_products scope)
+  const statusResp = await admin.graphql(
     `mutation UpdateProductStatus($id: ID!, $status: ProductStatus!) {
       productUpdate(input: { id: $id, status: $status }) {
         product { id status }
@@ -74,10 +113,30 @@ export async function action({ request }: any) {
     }`,
     { variables: { id: productId, status: newStatus } },
   );
-
-  const data = await resp.json();
-  const errs = data.data?.productUpdate?.userErrors ?? [];
+  const statusData = await statusResp.json();
+  const errs = statusData.data?.productUpdate?.userErrors ?? [];
   if (errs.length > 0) return { error: errs[0].message };
+
+  // Step 2: publish / unpublish to Online Store via REST using published_at.
+  // This uses write_products scope only — no read_publications needed.
+  const numericId = productId.replace("gid://shopify/Product/", "");
+  await fetch(
+    `https://${session.shop}/admin/api/2024-01/products/${numericId}.json`,
+    {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Shopify-Access-Token": session.accessToken as string,
+      },
+      body: JSON.stringify({
+        product: {
+          id: numericId,
+          published_at: newStatus === "ACTIVE" ? new Date().toISOString() : null,
+        },
+      }),
+    }
+  );
+
   return { success: true, productId, status: newStatus };
 }
 
@@ -129,6 +188,7 @@ export default function ProductsPage() {
 function ProductCard({ item }: { item: any }) {
   const { shopify, layers } = item;
   const fetcher = useFetcher<any>();
+  const [menuOpen, setMenuOpen] = useState(false);
 
   const price = shopify?.priceRangeV2?.minVariantPrice;
   const layerCount = Array.isArray(layers) ? (layers as LayerConfig[]).length : 0;
@@ -143,7 +203,8 @@ function ProductCard({ item }: { item: any }) {
   const saving = fetcher.state !== "idle";
 
   return (
-    <div style={{ border: "1px solid #e5e7eb", borderRadius: 12, overflow: "hidden", background: "#fff", display: "flex", flexDirection: "column" }}>
+    <div style={{ border: "1px solid #e5e7eb", borderRadius: 12, overflow: "hidden", background: "#fff", display: "flex", flexDirection: "column" }}
+      onMouseLeave={() => setMenuOpen(false)}>
 
       {/* Thumbnail */}
       <div style={{ background: "#f3f4f6", height: 180, display: "flex", alignItems: "center", justifyContent: "center", position: "relative", overflow: "hidden" }}>
@@ -167,6 +228,37 @@ function ProductCard({ item }: { item: any }) {
         }}>
           {isActive ? "● Active" : "○ Draft"}
         </span>
+
+        {/* ⋮ context menu */}
+        <div style={{ position: "absolute", top: 8, right: 8 }}>
+          <button onClick={(e) => { e.stopPropagation(); setMenuOpen((o) => !o); }}
+            style={{ width: 28, height: 28, borderRadius: "50%", border: "none", background: "rgba(255,255,255,0.9)", cursor: "pointer", fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 1px 4px rgba(0,0,0,0.15)" }}>
+            ⋮
+          </button>
+          {menuOpen && (
+            <div style={{ position: "absolute", right: 0, top: "110%", zIndex: 50, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 8, boxShadow: "0 4px 16px rgba(0,0,0,0.12)", minWidth: 170, overflow: "hidden" }}>
+              <Link to={`/app/configurator/${encodeURIComponent(item.productId)}`}
+                style={{ display: "block", padding: "9px 14px", fontSize: 13, color: "#374151", textDecoration: "none" }}
+                onClick={() => setMenuOpen(false)}>
+                Preview
+              </Link>
+              <fetcher.Form method="post" onSubmit={() => setMenuOpen(false)}>
+                <input type="hidden" name="productId" value={item.productId} />
+                <input type="hidden" name="intent" value="duplicate" />
+                <button type="submit" style={{ display: "block", width: "100%", textAlign: "left", padding: "9px 14px", border: "none", background: "none", cursor: "pointer", fontSize: 13, color: "#374151" }}>
+                  Duplicate
+                </button>
+              </fetcher.Form>
+              <fetcher.Form method="post" onSubmit={(e) => { if (!confirm(`Delete "${shopify?.title}"? This cannot be undone.`)) e.preventDefault(); else setMenuOpen(false); }}>
+                <input type="hidden" name="productId" value={item.productId} />
+                <input type="hidden" name="intent" value="delete" />
+                <button type="submit" style={{ display: "block", width: "100%", textAlign: "left", padding: "9px 14px", border: "none", background: "none", cursor: "pointer", fontSize: 13, color: "#ef4444" }}>
+                  Delete
+                </button>
+              </fetcher.Form>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Info */}

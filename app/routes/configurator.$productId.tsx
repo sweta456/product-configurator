@@ -8,12 +8,14 @@ import {
   Transformer,
 } from "react-konva";
 import ProductLayer from "../components/ProductLayer";
+import { ColorPickerPopup } from "../components/ModernColorPicker";
 import prisma from "../db.server";
 import {
   type LayerConfig,
   type Question,
   type ColorQuestion,
   type ThumbnailQuestion,
+  type DropdownQuestion,
   getLayerSrc,
   migrateOptions,
 } from "../types/configurator";
@@ -21,6 +23,7 @@ import {
 export const headers: HeadersFunction = () => ({
   "Content-Security-Policy": "frame-ancestors *",
   "X-Frame-Options": "ALLOWALL",
+  "ngrok-skip-browser-warning": "true",
 });
 
 const CANVAS_SIZE = 560;
@@ -58,6 +61,85 @@ export async function loader({ request, params }: any) {
 function isVisible(q: Question, selectedAnswers: Record<string, string>): boolean {
   if (!q.conditions?.length) return true;
   return q.conditions.every((c) => selectedAnswers[c.questionId] === c.value);
+}
+
+// Questions created via "CREATE → Color question +" store target layers in
+// applyOn instead of linkedLayerId. Returns ALL linked layer IDs.
+function getEffectiveLayerIds(q: ColorQuestion | ThumbnailQuestion): string[] {
+  if (q.linkedLayerId) return [q.linkedLayerId];
+  const applyOn: string[] = (q as any).applyOn ?? [];
+  return applyOn;
+}
+
+// ─── Image Dropdown (custom select with image thumbnails) ────────────────────
+
+function ImageDropdown({ q, selectedVals, onToggle, onHoverImages, qLabel }: {
+  q: DropdownQuestion;
+  selectedVals: string[];
+  onToggle: (val: string) => void;
+  onHoverImages?: (imgs: (string | null)[] | null) => void;
+  qLabel: React.CSSProperties;
+}) {
+  const [open, setOpen] = useState(false);
+  const selectedOpts = q.options.filter((o) => selectedVals.includes(o.value));
+  const getThumb = (o: { thumbnailUrl?: string; viewImages?: (string | null)[] }) =>
+    o.thumbnailUrl ?? o.viewImages?.find(Boolean) ?? null;
+
+  return (
+    <div style={{ marginTop: 20, position: "relative" }}>
+      <div style={qLabel}>{q.name}</div>
+      <button
+        onClick={() => setOpen((v) => !v)}
+        style={{ width: "100%", display: "flex", alignItems: "center", gap: 8, padding: "8px 10px", border: "1px solid #e5e7eb", borderRadius: 7, background: "#fff", cursor: "pointer", fontSize: 13, textAlign: "left" }}
+      >
+        {selectedOpts.length === 0 ? (
+          <span style={{ color: "#9ca3af", flex: 1 }}>— select —</span>
+        ) : (
+          <div style={{ display: "flex", alignItems: "center", gap: 6, flex: 1, flexWrap: "wrap" }}>
+            {selectedOpts.map((o) => {
+              const thumb = getThumb(o);
+              return (
+                <div key={o.value} style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                  {thumb && <img src={thumb} alt={o.label} style={{ width: 24, height: 24, objectFit: "cover", borderRadius: 3, border: "1px solid #e5e7eb" }} />}
+                  <span>{o.label}</span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+        <span style={{ color: "#9ca3af", fontSize: 10 }}>{open ? "▲" : "▼"}</span>
+      </button>
+
+      {open && <div style={{ position: "fixed", inset: 0, zIndex: 98 }} onClick={() => { setOpen(false); onHoverImages?.(null); }} />}
+
+      {open && (
+        <div style={{ position: "absolute", top: "100%", left: 0, right: 0, zIndex: 99, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 8, boxShadow: "0 4px 20px rgba(0,0,0,0.12)", overflow: "hidden", marginTop: 4 }}>
+          {q.options.map((o) => {
+            const thumb = getThumb(o);
+            const isSelected = selectedVals.includes(o.value);
+            const hasViewImages = (o as any).viewImages?.some(Boolean);
+            return (
+              <button
+                key={o.value}
+                onClick={() => { onToggle(o.value); if (!q.multipleSelection) setOpen(false); }}
+                onMouseEnter={() => hasViewImages ? onHoverImages?.((o as any).viewImages) : undefined}
+                onMouseLeave={() => onHoverImages?.(null)}
+                style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "9px 12px", border: "none", cursor: "pointer", fontSize: 13, background: isSelected ? "#eff6ff" : "#fff", textAlign: "left", borderBottom: "1px solid #f3f4f6" }}
+              >
+                {thumb ? (
+                  <img src={thumb} alt={o.label} style={{ width: 36, height: 36, objectFit: "cover", borderRadius: 5, border: `2px solid ${isSelected ? "#3b82f6" : "#e5e7eb"}`, flexShrink: 0 }} />
+                ) : (
+                  <span style={{ width: 36, height: 36, background: "#f3f4f6", borderRadius: 5, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16, flexShrink: 0 }}>🏔</span>
+                )}
+                <span style={{ flex: 1, fontWeight: isSelected ? 600 : 400 }}>{o.label}</span>
+                {isSelected && <span style={{ color: "#3b82f6", fontSize: 14 }}>✓</span>}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
 }
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
@@ -102,19 +184,50 @@ export default function StorefrontConfiguratorPage() {
       if (l.type === "colorable") init[l.id] = l.defaultColor || "#888";
     }
     for (const q of questions) {
-      if ((q.type === "color" || q.type === "thumbnail") && q.linkedLayerId && q.swatches.length > 0) {
-        init[q.linkedLayerId] = q.swatches[0].value;
+      if ((q.type === "color" || (q.type === "thumbnail" && (q as any).displayType !== "image")) && q.swatches.length > 0) {
+        for (const layerId of getEffectiveLayerIds(q as ColorQuestion | ThumbnailQuestion)) {
+          init[layerId] = q.swatches[0].value;
+        }
       }
     }
     return init;
   });
 
-  // Per-layer texture images (override flat color)
+  // Layer image overrides — when a thumbnail+image answer is selected, this
+  // replaces the layer's base src so the correct image shows per view.
+  const [layerImageOverrides, setLayerImageOverrides] = useState<Record<string, string[]>>(() => {
+    const init: Record<string, string[]> = {};
+    for (const q of questions) {
+      if (q.type === "thumbnail" && (q as any).displayType === "image" && q.swatches.length > 0) {
+        const first = q.swatches[0];
+        if (!first.viewImages?.length) continue;
+        const views = first.viewImages.map((v) => v || "");
+        for (const layerId of getEffectiveLayerIds(q as ThumbnailQuestion)) {
+          init[layerId] = views;
+        }
+      }
+    }
+    return init;
+  });
+
+  // Per-question canvas background images (label / dropdown / etc with viewImages).
+  // Keyed by question ID. Empty on init — only populated when user actively selects.
+  const [labelAnswerImages, setLabelAnswerImages] = useState<Record<string, (string | null)[]>>({});
+
+  // Transient hover preview — overrides labelAnswerImages on canvas while user is hovering.
+  const [hoverViewImages, setHoverViewImages] = useState<(string | null)[] | null>(null);
+
+  // Per-layer texture images (override flat color) — exclude image-type thumbnails
+  // since their swatch imageUrl is the picker thumbnail, not a colorization texture.
   const [layerTextures, setLayerTextures] = useState<Record<string, string>>(() => {
     const init: Record<string, string> = {};
     for (const q of questions) {
-      if ((q.type === "color" || q.type === "thumbnail") && q.linkedLayerId && q.swatches.length > 0 && q.swatches[0].imageUrl) {
-        init[q.linkedLayerId] = q.swatches[0].imageUrl;
+      const isImageThumbnail = q.type === "thumbnail" && ((q as any).displayType ?? "image") === "image";
+      if (isImageThumbnail) continue;
+      if ((q.type === "color" || q.type === "thumbnail") && q.swatches.length > 0 && q.swatches[0].imageUrl) {
+        for (const layerId of getEffectiveLayerIds(q as ColorQuestion | ThumbnailQuestion)) {
+          init[layerId] = q.swatches[0].imageUrl!;
+        }
       }
     }
     return init;
@@ -167,12 +280,16 @@ export default function StorefrontConfiguratorPage() {
         const newColors: Record<string, string> = {};
         const newTextures: Record<string, string> = {};
         for (const q of questions) {
-          if ((q.type === 'color' || q.type === 'thumbnail') && q.linkedLayerId) {
+          if (q.type === 'color' || q.type === 'thumbnail') {
+            const layerIds = getEffectiveLayerIds(q as ColorQuestion | ThumbnailQuestion);
+            if (!layerIds.length) continue;
             const val = sel.selectedAnswers[q.id];
             if (val) {
               const swatch = (q as any).swatches?.find((s: any) => s.value === val);
-              if (swatch?.imageUrl) newTextures[q.linkedLayerId!] = swatch.imageUrl;
-              newColors[q.linkedLayerId!] = val;
+              for (const layerId of layerIds) {
+                if (swatch?.imageUrl) newTextures[layerId] = swatch.imageUrl;
+                newColors[layerId] = val;
+              }
             }
           }
         }
@@ -207,12 +324,30 @@ export default function StorefrontConfiguratorPage() {
 
   const handleColorSwatchClick = (q: ColorQuestion | ThumbnailQuestion, swatchValue: string, swatchImageUrl?: string) => {
     setSelectedAnswers((p) => ({ ...p, [q.id]: swatchValue }));
-    if (q.linkedLayerId) {
-      setLayerColors((p) => ({ ...p, [q.linkedLayerId!]: swatchValue }));
+    const layerIds = getEffectiveLayerIds(q);
+    if (!layerIds.length) return;
+
+    const dt = (q as any).displayType ?? "color";
+    if (dt === "image") {
+      const swatch = q.swatches.find((s) => s.value === swatchValue);
+      const views = swatch?.viewImages ?? [];
+      setLayerImageOverrides((p) => {
+        const next = { ...p };
+        for (const lid of layerIds) next[lid] = views.map((v) => v || "");
+        return next;
+      });
+    } else {
+      setLayerColors((p) => {
+        const next = { ...p };
+        for (const lid of layerIds) next[lid] = swatchValue;
+        return next;
+      });
       setLayerTextures((p) => {
         const next = { ...p };
-        if (swatchImageUrl) next[q.linkedLayerId!] = swatchImageUrl;
-        else delete next[q.linkedLayerId!];
+        for (const lid of layerIds) {
+          if (swatchImageUrl) next[lid] = swatchImageUrl;
+          else delete next[lid];
+        }
         return next;
       });
     }
@@ -234,7 +369,22 @@ export default function StorefrontConfiguratorPage() {
       } else if (q.type === "text") {
         const val = textValues[q.id];
         if (val) properties[q.name] = val;
-      } else if (q.type === "dropdown" || q.type === "radio") {
+      } else if (q.type === "dropdown") {
+        const dq = q as DropdownQuestion;
+        if (dq.multipleSelection) {
+          const vals = (selectedAnswers[q.id] ?? "").split(",").filter(Boolean);
+          if (vals.length > 0) {
+            const labels = vals.map((v) => dq.options.find((o) => o.value === v)?.label ?? v);
+            properties[q.name] = labels.join(", ");
+          }
+        } else {
+          const selectedVal = selectedAnswers[q.id];
+          if (selectedVal) {
+            const opt = dq.options.find((o) => o.value === selectedVal);
+            properties[q.name] = opt ? opt.label : selectedVal;
+          }
+        }
+      } else if (q.type === "radio") {
         const selectedVal = selectedAnswers[q.id];
         if (selectedVal) {
           const opt = q.options.find((o) => o.value === selectedVal);
@@ -242,6 +392,12 @@ export default function StorefrontConfiguratorPage() {
         }
       } else if (q.type === "checkbox") {
         properties[q.name] = selectedAnswers[q.id] === "true" ? q.checkedLabel : q.uncheckedLabel;
+      } else if (q.type === "label" && (q.answers ?? []).length > 0) {
+        const selectedVals = (selectedAnswers[q.id] ?? "").split(",").filter(Boolean);
+        if (selectedVals.length > 0) {
+          const labels = selectedVals.map((v) => q.answers!.find((a) => a.value === v)?.label ?? v);
+          properties[q.name] = labels.join(", ");
+        }
       }
     }
 
@@ -286,7 +442,13 @@ export default function StorefrontConfiguratorPage() {
   };
 
   // Only need these for canvas rendering (Konva elements)
-  const visibleQuestions = questions.filter((q) => isVisible(q, selectedAnswers));
+  const visibleQuestions = questions.filter((q) => {
+    if (!isVisible(q, selectedAnswers)) return false;
+    // Skip questions with no selectable content (undefined OR empty) — prevents orphaned labels
+    if ((q.type === "radio" || q.type === "dropdown") && !(q as any).options?.length) return false;
+    if ((q.type === "color" || q.type === "thumbnail") && !(q as any).swatches?.length) return false;
+    return true;
+  });
   const textQuestions = visibleQuestions.filter((q): q is Question & { type: "text" } => q.type === "text");
   const fileQuestions = visibleQuestions.filter((q): q is Question & { type: "file" } => q.type === "file");
 
@@ -312,18 +474,66 @@ export default function StorefrontConfiguratorPage() {
       </div>
 
       {/* Body: left controls + canvas */}
-      <div style={{ flex: 1, display: "grid", gridTemplateColumns: "260px 1fr", overflow: "hidden" }}>
+      <div style={{ flex: 1, minHeight: 0, display: "grid", gridTemplateColumns: "260px 1fr", gridTemplateRows: "1fr", overflow: "hidden" }}>
 
         {/* Left controls — rendered in ORIGINAL question order */}
         <div style={{ borderRight: "1px solid #e5e7eb", background: "#fff", display: "flex", flexDirection: "column", overflow: "hidden" }}>
           <div style={{ flex: 1, overflowY: "auto", padding: "0 16px 20px" }}>
             {visibleQuestions.map((q) => {
-              if (q.type === "label") return (
-                <div key={q.id} style={{ marginTop: 20 }}>
-                  <div style={qLabel}>{q.name}</div>
-                  <p style={{ margin: 0, fontSize: 13, color: "#374151", lineHeight: 1.5 }}>{q.content}</p>
-                </div>
-              );
+              if (q.type === "label") {
+                const labelAnswers = q.answers ?? [];
+                if (labelAnswers.length > 0) {
+                  const activeVals = (selectedAnswers[q.id] ?? "").split(",").filter(Boolean);
+                  const toggleAnswer = (val: string) => {
+                    if (q.multipleSelection) {
+                      const next = activeVals.includes(val)
+                        ? activeVals.filter((v) => v !== val)
+                        : [...activeVals, val];
+                      setSelectedAnswers((p) => ({ ...p, [q.id]: next.join(",") }));
+                    } else {
+                      const newVal = activeVals[0] === val ? "" : val;
+                      setSelectedAnswers((p) => ({ ...p, [q.id]: newVal }));
+                      if (newVal) {
+                        const ans = q.answers?.find((a) => a.value === newVal);
+                        if (ans?.viewImages?.some(Boolean)) {
+                          setLabelAnswerImages((p) => ({ ...p, [q.id]: ans.viewImages! }));
+                        } else {
+                          setLabelAnswerImages((p) => { const n = { ...p }; delete n[q.id]; return n; });
+                        }
+                      } else {
+                        setLabelAnswerImages((p) => { const n = { ...p }; delete n[q.id]; return n; });
+                      }
+                    }
+                  };
+                  return (
+                    <div key={q.id} style={{ marginTop: 20 }}>
+                      <div style={{ fontSize: 13, fontWeight: 700, color: "#111827", marginBottom: 10 }}>{q.name}</div>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                        {labelAnswers.map((a) => {
+                          const isActive = activeVals.includes(a.value);
+                          const hasViewImages = a.viewImages?.some(Boolean);
+                          return (
+                            <button key={a.value}
+                              onClick={() => toggleAnswer(a.value)}
+                              onMouseEnter={() => hasViewImages ? setHoverViewImages(a.viewImages!) : undefined}
+                              onMouseLeave={() => setHoverViewImages(null)}
+                              style={{ display: "flex", alignItems: "center", gap: 6, padding: "9px 18px", borderRadius: 7, border: isActive ? "2px solid #2563eb" : "1px solid #d1d5db", background: isActive ? "#eff6ff" : "#fff", cursor: "pointer", fontSize: 13, fontWeight: 500, color: isActive ? "#2563eb" : "#374151", transition: "border-color 0.12s, background 0.12s" }}>
+                              {a.imageUrl && <img src={a.imageUrl} alt={a.label} style={{ width: 22, height: 22, borderRadius: 3, objectFit: "cover", flexShrink: 0 }} />}
+                              {a.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                }
+                return (
+                  <div key={q.id} style={{ marginTop: 20 }}>
+                    <div style={qLabel}>{q.name}</div>
+                    {q.content && <p style={{ margin: 0, fontSize: 13, color: "#374151", lineHeight: 1.5 }}>{q.content}</p>}
+                  </div>
+                );
+              }
 
               if (q.type === "color") {
                 const activeVal = selectedAnswers[q.id];
@@ -340,7 +550,6 @@ export default function StorefrontConfiguratorPage() {
                           />
                         );
                       })}
-                      <input type="color" value={activeVal || "#000000"} onChange={(e) => handleColorSwatchClick(q as ColorQuestion, e.target.value)} title="Custom colour" style={{ width: 34, height: 34, borderRadius: "50%", border: "2px solid #e5e7eb", padding: 2, cursor: "pointer" }} />
                     </div>
                   </div>
                 );
@@ -368,21 +577,58 @@ export default function StorefrontConfiguratorPage() {
                 );
               }
 
-              if (q.type === "dropdown") return (
-                <div key={q.id} style={{ marginTop: 20 }}>
-                  <div style={qLabel}>{q.name}</div>
-                  <select value={selectedAnswers[q.id] || ""} onChange={(e) => setSelectedAnswers((p) => ({ ...p, [q.id]: e.target.value }))} style={{ width: "100%", padding: "9px 10px", border: "1px solid #e5e7eb", borderRadius: 7, fontSize: 13, boxSizing: "border-box" }}>
-                    <option value="">— select —</option>
-                    {q.options.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-                  </select>
-                </div>
-              );
+              if (q.type === "dropdown") {
+                const dq = q as DropdownQuestion;
+                const isImageDrop = dq.displayType === "image";
+                const selectedVals = dq.multipleSelection
+                  ? (selectedAnswers[q.id] ?? "").split(",").filter(Boolean)
+                  : [selectedAnswers[q.id] ?? ""].filter(Boolean);
+
+                const toggleVal = (val: string) => {
+                  if (dq.multipleSelection) {
+                    const cur = (selectedAnswers[q.id] ?? "").split(",").filter(Boolean);
+                    const next = cur.includes(val) ? cur.filter((v) => v !== val) : [...cur, val];
+                    setSelectedAnswers((p) => ({ ...p, [q.id]: next.join(",") }));
+                  } else {
+                    setSelectedAnswers((p) => ({ ...p, [q.id]: val }));
+                    const opt = dq.options.find((o) => o.value === val);
+                    if ((opt as any)?.viewImages?.some(Boolean)) {
+                      setLabelAnswerImages((p) => ({ ...p, [q.id]: (opt as any).viewImages }));
+                    } else {
+                      setLabelAnswerImages((p) => { const n = { ...p }; delete n[q.id]; return n; });
+                    }
+                  }
+                };
+
+                if (isImageDrop) {
+                  return (
+                    <ImageDropdown
+                      key={q.id}
+                      q={dq}
+                      selectedVals={selectedVals}
+                      onToggle={toggleVal}
+                      onHoverImages={setHoverViewImages}
+                      qLabel={qLabel}
+                    />
+                  );
+                }
+
+                return (
+                  <div key={q.id} style={{ marginTop: 20 }}>
+                    <div style={qLabel}>{q.name}</div>
+                    <select value={selectedAnswers[q.id] || ""} onChange={(e) => setSelectedAnswers((p) => ({ ...p, [q.id]: e.target.value }))} style={{ width: "100%", padding: "9px 10px", border: "1px solid #e5e7eb", borderRadius: 7, fontSize: 13, boxSizing: "border-box" }}>
+                      <option value="">— select —</option>
+                      {(q.options ?? []).map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </select>
+                  </div>
+                );
+              }
 
               if (q.type === "radio") return (
                 <div key={q.id} style={{ marginTop: 20 }}>
                   <div style={qLabel}>{q.name}</div>
                   <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                    {q.options.map((o) => (
+                    {(q.options ?? []).map((o) => (
                       <label key={o.value} style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", padding: "8px 12px", borderRadius: 7, border: selectedAnswers[q.id] === o.value ? "2px solid #111827" : "1px solid #e5e7eb", background: selectedAnswers[q.id] === o.value ? "#f9fafb" : "#fff" }}>
                         <input type="radio" name={q.id} value={o.value} checked={selectedAnswers[q.id] === o.value} onChange={() => setSelectedAnswers((p) => ({ ...p, [q.id]: o.value }))} style={{ accentColor: "#111827" }} />
                         <span style={{ fontSize: 13 }}>{o.label}</span>
@@ -408,7 +654,7 @@ export default function StorefrontConfiguratorPage() {
                   <div style={{ display: "flex", gap: 10, marginTop: 8, alignItems: "flex-end" }}>
                     <div>
                       <label style={{ fontSize: 11, color: "#9ca3af", display: "block", marginBottom: 3 }}>Colour</label>
-                      <input type="color" value={textColors[q.id] ?? q.defaultColor} onChange={(e) => setTextColors((p) => ({ ...p, [q.id]: e.target.value }))} style={{ width: 32, height: 28, borderRadius: 4, border: "1px solid #e5e7eb" }} />
+                      <ColorPickerPopup value={textColors[q.id] ?? q.defaultColor} onChange={(hex) => setTextColors((p) => ({ ...p, [q.id]: hex }))} />
                     </div>
                     <div style={{ flex: 1 }}>
                       <label style={{ fontSize: 11, color: "#9ca3af", display: "block", marginBottom: 3 }}>Size: {textSizes[q.id] ?? q.defaultFontSize}px</label>
@@ -462,16 +708,43 @@ export default function StorefrontConfiguratorPage() {
                 style={{ boxShadow: "0 4px 24px rgba(0,0,0,0.10)", borderRadius: 6, background: "#fff" }}
               >
                 <KonvaLayer>
-                  {layers.map((layer) => (
-                    <ProductLayer
-                      key={layer.id}
-                      src={getLayerSrc(layer, currentView)}
-                      color={layer.type === "colorable" ? layerColors[layer.id] : undefined}
-                      textureUrl={layer.type === "colorable" ? layerTextures[layer.id] : undefined}
-                      width={CANVAS_SIZE}
-                      height={CANVAS_SIZE}
-                    />
-                  ))}
+                  {/* Hover preview takes full priority; otherwise show per-question selected images */}
+                  {hoverViewImages ? (
+                    (() => {
+                      const src = hoverViewImages[currentView] || hoverViewImages.find(Boolean) || "";
+                      return src ? <ProductLayer key="hover-bg" src={src} width={CANVAS_SIZE} height={CANVAS_SIZE} /> : null;
+                    })()
+                  ) : (
+                    Object.entries(labelAnswerImages).map(([qId, images]) => {
+                      const src = images[currentView] || images.find(Boolean) || "";
+                      return src ? <ProductLayer key={`q-bg-${qId}`} src={src} width={CANVAS_SIZE} height={CANVAS_SIZE} /> : null;
+                    })
+                  )}
+                  {layers.map((layer) => {
+                    const overrideImages = layerImageOverrides[layer.id];
+                    // Pick the right view image: prefer overrideImages (from thumbnail swatch),
+                    // fall back to layer's own src/extraViews/answers for the current view.
+                    // Use explicit null check so an empty-string slot doesn't incorrectly
+                    // collapse to view-0 — we want the slot's own value (even if empty).
+                    let src: string;
+                    if (overrideImages) {
+                      const slot = overrideImages[currentView];
+                      src = (slot != null && slot !== "") ? slot : (overrideImages.find((s) => s !== "" && s != null) ?? getLayerSrc(layer, currentView));
+                    } else {
+                      src = getLayerSrc(layer, currentView);
+                    }
+                    const isColorable = layer.type === "colorable";
+                    return (
+                      <ProductLayer
+                        key={layer.id}
+                        src={src}
+                        color={isColorable ? layerColors[layer.id] : undefined}
+                        textureUrl={isColorable ? layerTextures[layer.id] : undefined}
+                        width={CANVAS_SIZE}
+                        height={CANVAS_SIZE}
+                      />
+                    );
+                  })}
 
                   {textQuestions.map((q) => (
                     <KonvaText

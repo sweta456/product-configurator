@@ -3,7 +3,9 @@
   "private": true,
   "scripts": {
     "build": "react-router build",
-    "dev": "shopify app dev",
+    "predev": "npx --yes kill-port 9293 3000",
+    "dev": "shopify app dev --tunnel-url https://fragility-crinkle-bottling.ngrok-free.dev:3000",
+    "tunnel": "ngrok http --domain=fragility-crinkle-bottling.ngrok-free.dev 3000",
     "config:link": "shopify app config link",
     "generate": "shopify app generate",
     "deploy": "shopify app deploy",
