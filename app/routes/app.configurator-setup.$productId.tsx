@@ -21,6 +21,7 @@ import {
   type LabelAnswer,
   type GroupQuestion,
   type FileQuestion,
+  type LogoAnswer,
   type PrintArea,
   getLayerSrc,
   migrateOptions,
@@ -802,15 +803,17 @@ function AnswerDetailPanel({ swatch, numViews, displayType, onDone, onChange }: 
 
 // ─── Thumbnail question editor ─────────────────────────────────────────────────
 
-function ThumbnailEditor({ q, layers, questions, numViews, onChange, onEditAnswer, editingIdx, onSwitchType }: {
+function ThumbnailEditor({ q, layers, questions, numViews, onChange, onEditAnswer, editingIdx, onSwitchType, onPreview }: {
   q: ThumbnailQuestion; layers: LayerConfig[]; questions: Question[];
   numViews: number; onChange: (updated: Question) => void;
   onEditAnswer: (idx: number) => void;
   editingIdx: number | null;
   onSwitchType?: (type: InputType) => void;
+  onPreview?: (value: string) => void;
 }) {
   const [answerMenu, setAnswerMenu] = useState<number | null>(null);
   const [showApplyPicker, setShowApplyPicker] = useState(false);
+  const [applySearchColor, setApplySearchColor] = useState("");
   const [showInputTypePicker, setShowInputTypePicker] = useState(false);
   const [showDisplayTypePicker, setShowDisplayTypePicker] = useState(false);
   const displayType = (q.displayType ?? "image") as "image" | "color" | "none";
@@ -849,7 +852,12 @@ function ThumbnailEditor({ q, layers, questions, numViews, onChange, onEditAnswe
   const handleAnswerDragEnd = () => { setDragAnswerIdx(null); setDragOverAnswerIdx(null); };
 
   const linkedIds = q.applyOn ?? [];
-  const imageQs = questions.filter((oq) => oq.id !== q.id && oq.type === "thumbnail" && ((oq as ThumbnailQuestion).displayType ?? "image") === "image");
+  const imageQs = questions.filter((oq) =>
+    oq.id !== q.id && (
+      (oq.type === "thumbnail" && ((oq as ThumbnailQuestion).displayType ?? "image") === "image") ||
+      (oq.type === "dropdown" && (oq as DropdownQuestion).displayType === "image")
+    )
+  );
   const imageLayers = layers.filter((l) => l.displayType === "image");
   const allImageItems = [
     ...imageQs.map((oq) => ({ id: oq.id, name: oq.name })),
@@ -896,7 +904,7 @@ function ThumbnailEditor({ q, layers, questions, numViews, onChange, onEditAnswe
             style={{ position: "relative", marginBottom: 5, opacity: dragAnswerIdx === idx ? 0.35 : 1 }}
             onMouseLeave={() => setAnswerMenu(null)}
           >
-            <div onClick={() => onEditAnswer(idx)} style={{
+            <div onClick={() => { onEditAnswer(idx); if (displayType === "color") onPreview?.(s.value); }} style={{
               display: "flex", alignItems: "center", gap: 8, padding: "7px 10px",
               border: `1px solid ${dragOverAnswerIdx === idx && dragAnswerIdx !== idx ? "#0ea5e9" : editingIdx === idx ? "#93c5fd" : "#e5e7eb"}`,
               borderRadius: 7, cursor: "pointer",
@@ -997,21 +1005,32 @@ function ThumbnailEditor({ q, layers, questions, numViews, onChange, onEditAnswe
               <span style={{ fontSize: 13, color: "#9ca3af" }}>↳</span>
               <span style={{ fontSize: 12, color: "#6b7280", fontWeight: 500 }}>Apply on</span>
               <div style={{ marginLeft: "auto", position: "relative" }} onMouseLeave={() => setShowApplyPicker(false)}>
-                <button onClick={() => setShowApplyPicker((v) => !v)}
-                  style={{ display: "flex", alignItems: "center", gap: 5, padding: "4px 10px", border: "1px solid #e5e7eb", borderRadius: 6, cursor: "pointer", fontSize: 12, background: "#f9fafb", color: "#374151" }}>
+                <button onClick={() => { setShowApplyPicker((v) => !v); setApplySearchColor(""); }}
+                  style={{ display: "flex", alignItems: "center", gap: 5, padding: "4px 10px", border: "1px solid #e5e7eb", borderRadius: 6, cursor: "pointer", fontSize: 12, background: showApplyPicker ? "#eff6ff" : "#f9fafb", color: "#374151" }}>
                   <span>🏔</span><span>Image question</span><span style={{ fontWeight: 700 }}>+</span>
                 </button>
                 {showApplyPicker && (
-                  <div style={{ position: "absolute", right: 0, top: "calc(100% + 4px)", zIndex: 50, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 8, boxShadow: "0 4px 16px rgba(0,0,0,0.12)", minWidth: 180, overflow: "hidden" }}>
-                    {allImageItems.filter((item) => !linkedIds.includes(item.id)).map((item) => (
-                      <button key={item.id} onClick={() => { onChange({ ...q, applyOn: [...linkedIds, item.id] }); setShowApplyPicker(false); }}
-                        style={{ display: "block", width: "100%", textAlign: "left", padding: "8px 14px", border: "none", background: "none", cursor: "pointer", fontSize: 13, color: "#374151" }}>
-                        {item.name}
-                      </button>
-                    ))}
-                    {allImageItems.filter((item) => !linkedIds.includes(item.id)).length === 0 && (
-                      <p style={{ padding: "8px 14px", fontSize: 12, color: "#9ca3af", margin: 0 }}>No image questions available.</p>
-                    )}
+                  <div style={{ position: "absolute", right: 0, top: "calc(100% + 4px)", zIndex: 50, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 8, boxShadow: "0 4px 16px rgba(0,0,0,0.12)", minWidth: 200, padding: "8px 8px 6px" }}>
+                    <input
+                      autoFocus
+                      value={applySearchColor}
+                      onChange={(e) => setApplySearchColor(e.target.value)}
+                      placeholder="Search..."
+                      style={{ width: "100%", padding: "5px 8px", fontSize: 12, border: "1px solid #e5e7eb", borderRadius: 5, marginBottom: 6, boxSizing: "border-box", outline: "none" }}
+                    />
+                    <div style={{ maxHeight: 180, overflowY: "auto" }}>
+                      {allImageItems
+                        .filter((item) => !linkedIds.includes(item.id) && item.name.toLowerCase().includes(applySearchColor.toLowerCase()))
+                        .map((item) => (
+                          <button key={item.id} onClick={() => { onChange({ ...q, applyOn: [...linkedIds, item.id] }); setShowApplyPicker(false); setApplySearchColor(""); }}
+                            style={{ display: "block", width: "100%", textAlign: "left", padding: "7px 10px", border: "none", borderRadius: 5, background: "none", cursor: "pointer", fontSize: 13, color: "#374151" }}>
+                            {item.name}
+                          </button>
+                        ))}
+                      {allImageItems.filter((item) => !linkedIds.includes(item.id) && item.name.toLowerCase().includes(applySearchColor.toLowerCase())).length === 0 && (
+                        <p style={{ padding: "6px 10px", fontSize: 12, color: "#9ca3af", margin: 0 }}>No matches.</p>
+                      )}
+                    </div>
                   </div>
                 )}
               </div>
@@ -1353,6 +1372,66 @@ function TextEditor({ q, layers, onChange, onSwitchType, onCreateSubQuestion }: 
   );
 }
 
+// ─── Logo answer detail panel ─────────────────────────────────────────────────
+
+function LogoAnswerDetailPanel({ answer, onDone, onChange }: {
+  answer: LogoAnswer;
+  onDone: () => void;
+  onChange: (updated: LogoAnswer) => void;
+}) {
+  return (
+    <div>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px", borderBottom: "1px solid #e5e7eb" }}>
+        <span style={{ fontSize: 15, color: "#9ca3af", letterSpacing: 3 }}>⠿</span>
+        <button onClick={onDone}
+          style={{ padding: "5px 18px", border: "1px solid #e5e7eb", borderRadius: 6, cursor: "pointer", fontSize: 12, fontWeight: 600, background: "#fff", color: "#374151" }}>
+          Done
+        </button>
+      </div>
+      <div style={{ padding: "12px 16px 8px" }}>
+        <label style={labelSt}>Title</label>
+        <input value={answer.label} onChange={(e) => onChange({ ...answer, label: e.target.value })} style={inputSt} autoFocus />
+      </div>
+      <div style={{ padding: "4px 16px 10px", borderTop: "1px solid #f3f4f6" }}>
+        <label style={{ fontSize: 13, fontWeight: 500, color: "#374151", display: "block", marginBottom: 6 }}>Image</label>
+        <ImageUploadSlot label="" currentUrl={answer.imageUrl ?? null} onUploaded={(url) => onChange({ ...answer, imageUrl: url ?? undefined })} />
+      </div>
+      <div style={{ padding: "4px 16px 10px", borderTop: "1px solid #f3f4f6" }}>
+        <label style={{ fontSize: 13, fontWeight: 500, color: "#374151", display: "block", marginBottom: 6 }}>Thumbnail</label>
+        <ImageUploadSlot label="" currentUrl={answer.thumbnailUrl ?? null} onUploaded={(url) => onChange({ ...answer, thumbnailUrl: url ?? undefined })} />
+      </div>
+      <div style={{ borderTop: "1px solid #f3f4f6" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 16px" }}>
+          <label style={{ fontSize: 13, color: "#374151" }}>Description</label>
+          <input type="checkbox" checked={answer.description !== undefined}
+            onChange={(e) => onChange({ ...answer, description: e.target.checked ? "" : undefined })}
+            style={{ width: 16, height: 16, cursor: "pointer", accentColor: "#22c55e" }} />
+        </div>
+        {answer.description !== undefined && (
+          <div style={{ padding: "0 16px 10px" }}>
+            <input value={answer.description} onChange={(e) => onChange({ ...answer, description: e.target.value })}
+              placeholder="Enter description…" style={inputSt} />
+          </div>
+        )}
+      </div>
+      <div style={{ borderTop: "1px solid #f3f4f6" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 16px" }}>
+          <label style={{ fontSize: 13, color: "#374151" }}>Production code</label>
+          <input type="checkbox" checked={answer.productionCode !== undefined}
+            onChange={(e) => onChange({ ...answer, productionCode: e.target.checked ? "" : undefined })}
+            style={{ width: 16, height: 16, cursor: "pointer", accentColor: "#22c55e" }} />
+        </div>
+        {answer.productionCode !== undefined && (
+          <div style={{ padding: "0 16px 10px" }}>
+            <input value={answer.productionCode} onChange={(e) => onChange({ ...answer, productionCode: e.target.value })}
+              placeholder="Enter production code…" style={inputSt} />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ─── File question editor ─────────────────────────────────────────────────────
 
 function FileEditor({ q, onChange, onSwitchType, onEditPrintArea }: {
@@ -1365,6 +1444,8 @@ function FileEditor({ q, onChange, onSwitchType, onEditPrintArea }: {
   const [showDisplayDD, setShowDisplayDD] = useState(false);
   const [showPAPicker, setShowPAPicker] = useState(false);
   const [paSearch, setPaSearch] = useState("");
+  const [editingAnswerIdx, setEditingAnswerIdx] = useState<number | null>(null);
+  const [answerMenu, setAnswerMenu] = useState<number | null>(null);
 
   const displayType = q.displayType ?? "none";
   const dtMeta = DISPLAY_TYPE_META[displayType] ?? DISPLAY_TYPE_META.none;
@@ -1372,6 +1453,33 @@ function FileEditor({ q, onChange, onSwitchType, onEditPrintArea }: {
   const printAreas = q.printAreas ?? [];
   const transforms = q.allowedTransforms ?? { move: true, resize: true, rotate: false };
   const fileTypeMeta = INPUT_TYPE_CONFIG.find((c) => c.type === "file")!;
+  const logoAnswers = q.answers ?? [];
+
+  const addLogoAnswer = () => {
+    const newAns: LogoAnswer = { id: `logo-${Date.now()}`, label: "Untitled answer" };
+    const next = [...logoAnswers, newAns];
+    onChange({ ...q, answers: next });
+    setEditingAnswerIdx(next.length - 1);
+  };
+
+  const updateLogoAnswer = (idx: number, updated: LogoAnswer) => {
+    onChange({ ...q, answers: logoAnswers.map((a, i) => i === idx ? updated : a) });
+  };
+
+  const removeLogoAnswer = (idx: number) => {
+    onChange({ ...q, answers: logoAnswers.filter((_, i) => i !== idx) });
+    if (editingAnswerIdx === idx) setEditingAnswerIdx(null);
+  };
+
+  if (editingAnswerIdx !== null && logoAnswers[editingAnswerIdx]) {
+    return (
+      <LogoAnswerDetailPanel
+        answer={logoAnswers[editingAnswerIdx]}
+        onDone={() => setEditingAnswerIdx(null)}
+        onChange={(updated) => updateLogoAnswer(editingAnswerIdx, updated)}
+      />
+    );
+  }
 
   const addPA = () => {
     const id = `pa-${Date.now()}`;
@@ -1404,12 +1512,43 @@ function FileEditor({ q, onChange, onSwitchType, onEditPrintArea }: {
             <span style={{ fontSize: 13, fontWeight: 600, color: "#374151" }}>Logo answers</span>
             <div style={{ display: "flex", gap: 5 }}>
               <button title="Library" style={{ background: "none", border: "1px solid #e5e7eb", borderRadius: 5, width: 28, height: 28, cursor: "pointer", fontSize: 13, color: "#9ca3af", display: "flex", alignItems: "center", justifyContent: "center" }}>⊞</button>
-              <button style={{ width: 28, height: 28, background: "#111827", color: "#fff", border: "none", borderRadius: 5, cursor: "pointer", fontSize: 18, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>+</button>
+              <button onClick={addLogoAnswer} style={{ width: 28, height: 28, background: "#111827", color: "#fff", border: "none", borderRadius: 5, cursor: "pointer", fontSize: 18, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center" }}>+</button>
             </div>
           </div>
-          <div style={{ padding: "14px", border: "2px dashed #e5e7eb", borderRadius: 8, textAlign: "center" }}>
-            <p style={{ fontSize: 12, color: "#9ca3af", margin: 0 }}>No answers yet.</p>
-          </div>
+
+          {logoAnswers.length === 0 && (
+            <div style={{ padding: "14px", border: "2px dashed #e5e7eb", borderRadius: 8, textAlign: "center" }}>
+              <p style={{ fontSize: 12, color: "#9ca3af", margin: "0 0 8px" }}>No answers yet.</p>
+              <button onClick={addLogoAnswer} style={{ padding: "6px 14px", background: "#111827", color: "#fff", border: "none", borderRadius: 6, cursor: "pointer", fontSize: 12, fontWeight: 600 }}>+ Add first answer</button>
+            </div>
+          )}
+
+          {logoAnswers.map((ans, idx) => (
+            <div key={ans.id} style={{ position: "relative", marginBottom: 5 }} onMouseLeave={() => setAnswerMenu(null)}>
+              <div
+                onClick={() => setEditingAnswerIdx(idx)}
+                style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 10px", border: `1px solid ${editingAnswerIdx === idx ? "#93c5fd" : "#e5e7eb"}`, borderRadius: 7, cursor: "pointer", background: editingAnswerIdx === idx ? "#eff6ff" : "#fafafa" }}
+              >
+                <span style={{ cursor: "grab", color: "#d1d5db", fontSize: 11, userSelect: "none" }}>⠿</span>
+                {ans.thumbnailUrl || ans.imageUrl
+                  ? <img src={ans.thumbnailUrl ?? ans.imageUrl} alt={ans.label} style={{ width: 28, height: 28, borderRadius: 4, objectFit: "cover", border: "1px solid #e5e7eb", flexShrink: 0 }} />
+                  : <span style={{ width: 28, height: 28, borderRadius: 4, background: "#f3f4f6", border: "1px dashed #d1d5db", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14, color: "#9ca3af", flexShrink: 0 }}>⭐</span>
+                }
+                <span style={{ flex: 1, fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{ans.label || "Untitled answer"}</span>
+                <button onClick={(e) => { e.stopPropagation(); setAnswerMenu(answerMenu === idx ? null : idx); }}
+                  style={{ background: "none", border: "none", color: "#9ca3af", cursor: "pointer", fontSize: 16, padding: "0 2px", flexShrink: 0 }}>⋮</button>
+                <span style={{ color: "#22c55e", fontSize: 14, flexShrink: 0 }}>✓</span>
+              </div>
+              {answerMenu === idx && (
+                <div style={{ position: "absolute", right: 8, top: "100%", zIndex: 50, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 8, boxShadow: "0 4px 16px rgba(0,0,0,0.12)", minWidth: 140, overflow: "hidden" }}>
+                  <button onClick={(e) => { e.stopPropagation(); setEditingAnswerIdx(idx); setAnswerMenu(null); }}
+                    style={{ display: "block", width: "100%", textAlign: "left", padding: "8px 14px", border: "none", background: "none", cursor: "pointer", fontSize: 13, color: "#374151" }}>Edit</button>
+                  <button onClick={(e) => { e.stopPropagation(); removeLogoAnswer(idx); setAnswerMenu(null); }}
+                    style={{ display: "block", width: "100%", textAlign: "left", padding: "8px 14px", border: "none", background: "none", cursor: "pointer", fontSize: 13, color: "#ef4444" }}>Delete</button>
+                </div>
+              )}
+            </div>
+          ))}
         </div>
       )}
 
@@ -2214,7 +2353,7 @@ function GroupEditorComp({ q, questions, onChange, onAddElement }: {
 
 // ─── View upload slot ─────────────────────────────────────────────────────────
 
-const MAX_VIEWS = 4;
+const MAX_VIEWS = 20;
 
 function ViewUploadSlot({ viewIndex, currentUrl, onUploaded, onUrlChange }: {
   viewIndex: number; currentUrl: string; onUploaded: (url: string) => void; onUrlChange: (url: string) => void;
@@ -3010,16 +3149,9 @@ export default function BuilderPage() {
   useEffect(() => { setMounted(true); }, []);
   useEffect(() => { setAnswerEditState(null); setEditingPrintAreaId(null); }, [selected?.id]);
 
-  // Swatch preview — initialize with first swatch so builder matches customer view default
-  const [selectedSwatches, setSelectedSwatches] = useState<Record<string, string>>(() => {
-    const init: Record<string, string> = {};
-    for (const q of questions) {
-      if ((q.type === "color" || q.type === "thumbnail") && q.swatches.length > 0) {
-        init[q.id] = q.swatches[0].value;
-      }
-    }
-    return init;
-  });
+  // Swatch preview state — starts empty so layers render their natural uploaded PNG.
+  // Updated when user clicks a swatch in the right panel for a live color preview.
+  const [selectedSwatches, setSelectedSwatches] = useState<Record<string, string>>({});
 
   const canvasColors = useMemo(() => {
     const c: Record<string, string> = {};
@@ -3027,10 +3159,12 @@ export default function BuilderPage() {
       const isImageThumbnail = q.type === "thumbnail" && ((q as any).displayType ?? "image") === "image";
       if (isImageThumbnail) continue;
       if (q.type === "color" || q.type === "thumbnail") {
-        const layerId = (q as any).linkedLayerId ?? (q as any).applyOn?.[0];
-        if (!layerId) continue;
+        const linkedLayerId = (q as any).linkedLayerId as string | undefined;
+        const applyOn = (q as any).applyOn as string[] | undefined;
+        const layerIds: string[] = linkedLayerId ? [linkedLayerId, ...(applyOn ?? [])] : (applyOn ?? []);
+        if (!layerIds.length) continue;
         const picked = selectedSwatches[q.id];
-        if (picked) c[layerId] = picked;
+        if (picked) { for (const lid of layerIds) c[lid] = picked; }
       }
     }
     return c;
@@ -3042,12 +3176,14 @@ export default function BuilderPage() {
       const isImageThumbnail = q.type === "thumbnail" && ((q as any).displayType ?? "image") === "image";
       if (isImageThumbnail) continue;
       if (q.type === "color" || q.type === "thumbnail") {
-        const layerId = (q as any).linkedLayerId ?? (q as any).applyOn?.[0];
-        if (!layerId) continue;
+        const linkedLayerId = (q as any).linkedLayerId as string | undefined;
+        const applyOn = (q as any).applyOn as string[] | undefined;
+        const layerIds: string[] = linkedLayerId ? [linkedLayerId, ...(applyOn ?? [])] : (applyOn ?? []);
+        if (!layerIds.length) continue;
         const pickedVal = selectedSwatches[q.id];
         if (pickedVal) {
           const swatch = q.swatches.find((s) => s.value === pickedVal);
-          if (swatch?.imageUrl) t[layerId] = swatch.imageUrl;
+          if (swatch?.imageUrl) { for (const lid of layerIds) t[lid] = swatch.imageUrl; }
         }
       }
     }
@@ -3059,13 +3195,16 @@ export default function BuilderPage() {
     const o: Record<string, string[]> = {};
     for (const q of questions) {
       if (q.type !== "thumbnail" || ((q as any).displayType ?? "image") !== "image") continue;
-      const layerId = (q as any).linkedLayerId ?? (q as any).applyOn?.[0];
-      if (!layerId) continue;
+      const linkedLayerId = (q as any).linkedLayerId as string | undefined;
+      const applyOn = (q as any).applyOn as string[] | undefined;
+      const layerIds: string[] = linkedLayerId ? [linkedLayerId, ...(applyOn ?? [])] : (applyOn ?? []);
+      if (!layerIds.length) continue;
       const picked = selectedSwatches[q.id];
       if (!picked) continue;
       const swatch = q.swatches.find((s) => s.value === picked);
       if (swatch?.viewImages?.length) {
-        o[layerId] = swatch.viewImages.map((v) => v || "");
+        const viewArr = swatch.viewImages.map((v) => v || "");
+        for (const lid of layerIds) o[lid] = viewArr;
       }
     }
     return o;
@@ -3074,7 +3213,13 @@ export default function BuilderPage() {
   const textItems = useMemo(() => questions.filter((q): q is TextQuestion => q.type === "text"), [questions]);
   const filePlaceholders = useMemo(() => questions.filter((q): q is Question & { type: "file" } => q.type === "file"), [questions]);
 
-  const S = CANVAS_SIZE / 800;
+  // Compute display dimensions that preserve the canvas aspect ratio, capped at CANVAS_SIZE
+  const aspectRatio = canvasW / canvasH;
+  const displayW = aspectRatio >= 1 ? CANVAS_SIZE : Math.round(CANVAS_SIZE * aspectRatio);
+  const displayH = aspectRatio <= 1 ? CANVAS_SIZE : Math.round(CANVAS_SIZE / aspectRatio);
+  const canvasDisplayScale = displayW / canvasW;
+  // S maps text/logo positions from 800px logical space → canvas pixel space
+  const S = canvasW / 800;
 
   // Konva refs for drag/rotate
   const textNodeRefs = useRef<Record<string, any>>({});
@@ -3364,10 +3509,8 @@ export default function BuilderPage() {
             <div style={{ marginBottom: 20 }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
                 <label style={{ fontSize: 10, fontWeight: 700, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.05em" }}>Product views</label>
-                {numViews < MAX_VIEWS && (
-                  <button onClick={() => { setNumViews((n) => Math.min(n + 1, MAX_VIEWS)); setCurrentView(numViews); }}
-                    style={{ background: "#111827", color: "#fff", border: "none", borderRadius: 4, padding: "3px 9px", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>+</button>
-                )}
+                <button onClick={() => { setNumViews((n) => n + 1); setCurrentView(numViews); }}
+                  style={{ background: "#111827", color: "#fff", border: "none", borderRadius: 4, padding: "3px 9px", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>+</button>
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
                 {Array.from({ length: numViews }).map((_, vi) => (
@@ -3412,13 +3555,15 @@ export default function BuilderPage() {
           </div>
         ) : (
           /* ── Layers panel ───────────────────────────────────────────── */
-          <div style={{ flex: 1, overflowY: "auto" }}>
+          <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}>
 
-            {/* QUESTIONS */}
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px 4px" }}>
+            {/* ── QUESTIONS section ── */}
+            <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0, borderBottom: "2px solid #e5e7eb" }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px 4px", flexShrink: 0 }}>
               <span style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "#9ca3af" }}>Questions</span>
               <button onClick={() => setShowAddModal(true)} title="Add question" style={{ ...smallBtnSt, background: "#111827", color: "#fff", borderRadius: 6, padding: "3px 10px" }}>+ Add</button>
             </div>
+            <div style={{ flex: 1, overflowY: "auto", minHeight: 0 }}>
 
             {questions.length === 0 && (
               <p style={{ padding: "8px 14px", fontSize: 12, color: "#9ca3af", margin: 0 }}>No questions yet. Click "Add" to create one.</p>
@@ -3488,12 +3633,16 @@ export default function BuilderPage() {
               });
             })()}
 
-            {/* LAYERS (Behind the scene) */}
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 14px 4px", borderTop: "1px solid #f3f4f6", marginTop: 8 }}>
+            </div>{/* end questions scroll */}
+            </div>{/* end questions section */}
+
+            {/* ── BEHIND THE SCENE section ── */}
+            <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px 4px", flexShrink: 0 }}>
               <span style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "#9ca3af" }}>Behind the scene</span>
               <button onClick={() => setShowAddLayerModal(true)} style={smallBtnSt}>+</button>
             </div>
-
+            <div style={{ flex: 1, overflowY: "auto", minHeight: 0 }}>
             {layers.map((l, idx) => {
               const forwardNames = (l.applyOn ?? []).map((qid) => questions.find((q) => q.id === qid)?.name).filter(Boolean) as string[];
               const reverseNames = questions.filter((q) => (q as any).applyOn?.includes(l.id)).map((q) => q.name);
@@ -3512,6 +3661,8 @@ export default function BuilderPage() {
                 />
               );
             })}
+            </div>{/* end layers scroll */}
+            </div>{/* end layers section */}
           </div>
         )}
 
@@ -3533,6 +3684,12 @@ export default function BuilderPage() {
           <span style={{ fontWeight: 700, fontSize: 13, borderBottom: "2px solid #111827", paddingBottom: 2 }}>Build</span>
           <span style={{ color: "#9ca3af", fontSize: 13 }}>Pricing</span>
           <span style={{ color: "#9ca3af", fontSize: 13 }}>Variants</span>
+          <Link
+            to={`/app/configurator-style/${encodeURIComponent(product.id)}`}
+            style={{ color: "#5c6ac4", fontSize: 13, fontWeight: 500, textDecoration: "none", padding: "2px 10px", borderRadius: 20, border: "1.5px solid #5c6ac4", lineHeight: "20px" }}
+          >
+            🎨 Style
+          </Link>
           {actionData?.success && (
             <span style={{ marginLeft: "auto", background: "#d1fae5", color: "#065f46", padding: "3px 12px", borderRadius: 20, fontSize: 12, fontWeight: 600 }}>✓ Saved</span>
           )}
@@ -3550,19 +3707,19 @@ export default function BuilderPage() {
           )}
 
           {mounted ? (
-            <div style={{ position: "relative", boxShadow: "0 8px 32px rgba(0,0,0,0.14)", borderRadius: 6, overflow: "hidden", background: "#fff" }}>
+            <div style={{ position: "relative", borderRadius: 6, overflow: "hidden", background: "repeating-conic-gradient(#d1d5db 0% 25%, #e5e7eb 0% 50%) 0 0 / 16px 16px" }}>
               {layers.length === 0 && (
                 <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 10, color: "#9ca3af", zIndex: 1, pointerEvents: "none" }}>
                   <div style={{ fontSize: 40 }}>🎨</div>
                   <p style={{ margin: 0, fontSize: 13, textAlign: "center", lineHeight: 1.5, padding: "0 20px" }}>Add layers using the <strong>+</strong> button in the left panel.</p>
                 </div>
               )}
-              <Stage width={CANVAS_SIZE} height={CANVAS_SIZE}>
-                <KonvaLayer>
+              <Stage width={displayW} height={displayH} style={{ display: "block" }}>
+                <KonvaLayer scaleX={canvasDisplayScale} scaleY={canvasDisplayScale}>
                   {/* Label answer preview — shows while editing a label answer with viewImages */}
                   {labelPreviewImages && (() => {
                     const src = labelPreviewImages[currentView] || labelPreviewImages.find(Boolean) || "";
-                    return src ? <ProductLayer src={src} width={CANVAS_SIZE} height={CANVAS_SIZE} /> : null;
+                    return src ? <ProductLayer src={src} width={canvasW} height={canvasH} /> : null;
                   })()}
                   {layers.map((layer) => {
                     const imgOverride = canvasImageOverrides[layer.id];
@@ -3575,15 +3732,14 @@ export default function BuilderPage() {
                     } else {
                       layerSrc = getLayerSrc(layer, currentView, layerPreviewAnswerIdx[layer.id] ?? 0);
                     }
-                    const isColorable = layer.type === "colorable";
                     return (
                       <ProductLayer
                         key={layer.id}
                         src={layerSrc}
-                        color={isColorable ? canvasColors[layer.id] : undefined}
-                        textureUrl={isColorable ? canvasTextures[layer.id] : undefined}
-                        width={CANVAS_SIZE}
-                        height={CANVAS_SIZE}
+                        color={canvasColors[layer.id]}
+                        textureUrl={canvasTextures[layer.id]}
+                        width={canvasW}
+                        height={canvasH}
                       />
                     );
                   })}
@@ -3672,7 +3828,7 @@ export default function BuilderPage() {
               </Stage>
             </div>
           ) : (
-            <div style={{ width: CANVAS_SIZE, height: CANVAS_SIZE, background: "#e5e7eb", borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center", color: "#9ca3af", fontSize: 14 }}>Loading canvas…</div>
+            <div style={{ width: displayW, height: displayH, background: "#e5e7eb", borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center", color: "#9ca3af", fontSize: 14 }}>Loading canvas…</div>
           )}
 
           {/* Right navigation arrow */}
@@ -3692,12 +3848,10 @@ export default function BuilderPage() {
               title={`View ${vi + 1}`}
             />
           ))}
-          {numViews < MAX_VIEWS && (
-            <button onClick={() => { setNumViews((n) => Math.min(n + 1, MAX_VIEWS)); setCurrentView(numViews); }}
-              style={{ background: "none", border: "1px dashed #d1d5db", borderRadius: 5, width: 22, height: 22, cursor: "pointer", fontSize: 14, color: "#9ca3af", display: "flex", alignItems: "center", justifyContent: "center", padding: 0 }}
-              title="Add view"
-            >+</button>
-          )}
+          <button onClick={() => { setNumViews((n) => n + 1); setCurrentView(numViews); }}
+            style={{ background: "none", border: "1px dashed #d1d5db", borderRadius: 5, width: 22, height: 22, cursor: "pointer", fontSize: 14, color: "#9ca3af", display: "flex", alignItems: "center", justifyContent: "center", padding: 0 }}
+            title="Add view"
+          >+</button>
           {numViews > 1 && (
             <button onClick={() => { setNumViews((n) => n - 1); setCurrentView((v) => Math.min(v, numViews - 2)); }}
               style={{ background: "none", border: "1px dashed #fca5a5", borderRadius: 5, width: 22, height: 22, cursor: "pointer", fontSize: 12, color: "#ef4444", display: "flex", alignItems: "center", justifyContent: "center", padding: 0 }}
@@ -3726,7 +3880,12 @@ export default function BuilderPage() {
               numViews={numViews}
               displayType={(tq.displayType ?? "image") as "image" | "color" | "none"}
               onDone={() => setAnswerEditState(null)}
-              onChange={(updated) => updateQ({ ...tq, swatches: tq.swatches.map((s, i) => i === answerEditState.answerIdx ? updated : s) })}
+              onChange={(updated) => {
+                updateQ({ ...tq, swatches: tq.swatches.map((s, i) => i === answerEditState.answerIdx ? updated : s) });
+                if ((tq.displayType ?? "image") === "color") {
+                  setSelectedSwatches((p) => ({ ...p, [tq.id]: updated.value }));
+                }
+              }}
             />
           </div>
         );
@@ -3747,7 +3906,16 @@ export default function BuilderPage() {
               displayType="image"
               onDone={() => setAnswerEditState(null)}
               onChange={(updated) => {
-                const updatedOpt: DropdownOption = { value: updated.value, label: updated.label, thumbnailUrl: updated.imageUrl, viewImages: updated.viewImages, description: updated.description, productionCode: updated.productionCode };
+                // Use first non-null viewImage as the list thumbnail if no explicit imageUrl
+                const firstViewImg = updated.viewImages?.find(Boolean) ?? null;
+                const updatedOpt: DropdownOption = {
+                  value: updated.value,
+                  label: updated.label,
+                  thumbnailUrl: updated.imageUrl ?? firstViewImg ?? undefined,
+                  viewImages: updated.viewImages,
+                  description: updated.description,
+                  productionCode: updated.productionCode,
+                };
                 updateQ({ ...dq, options: dq.options.map((o, i) => i === answerEditState.answerIdx ? updatedOpt : o) });
               }}
             />
@@ -3818,6 +3986,7 @@ export default function BuilderPage() {
               onEditAnswer={(idx) => setAnswerEditState({ questionId: selQ.id, answerIdx: idx })}
               editingIdx={answerEditState?.questionId === selQ.id ? (answerEditState?.answerIdx ?? null) : null}
               onSwitchType={(t) => switchQuestionType(selQ.id, t)}
+              onPreview={(value) => setSelectedSwatches((p) => ({ ...p, [selQ.id]: value }))}
             />
           )}
           {/* Pure color picker questions → SwatchEditor */}

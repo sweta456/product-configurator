@@ -1,7 +1,7 @@
 import { AppProvider } from "@shopify/shopify-app-react-router/react";
 import { useState } from "react";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
-import { Form, useActionData, useLoaderData } from "react-router";
+import { Form, useActionData, useLoaderData, useSearchParams } from "react-router";
 
 import { login } from "../../shopify.server";
 import prisma from "../../db.server";
@@ -61,24 +61,43 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 export default function Auth() {
   const loaderData = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
-  const [shop, setShop] = useState("");
+  const [searchParams] = useSearchParams();
+  const [shop, setShop] = useState(searchParams.get("shop") ?? "");
   const { errors } = ((actionData || loaderData) as any) ?? { errors: {} };
 
   return (
     <AppProvider embedded={false}>
       <s-page>
         <Form method="post">
+          {/* Hidden input ensures shop value is always included in form data */}
+          <input type="hidden" name="shop" value={shop} />
           <s-section heading="Log in">
             <s-text-field
-              name="shop"
+              name="_shop_display"
               label="Shop domain"
               details="example.myshopify.com"
               value={shop}
-              onChange={(e: any) => setShop(e.currentTarget.value)}
+              onChange={(e: any) => setShop(e.target?.value ?? e.currentTarget?.value ?? "")}
               autocomplete="on"
               error={errors?.shop}
             ></s-text-field>
-            <s-button type="submit">Log in</s-button>
+            {/* Use native button so React Router Form submission works reliably */}
+            <button
+              type="submit"
+              style={{
+                marginTop: 12,
+                padding: "10px 20px",
+                background: "#008060",
+                color: "#fff",
+                border: "none",
+                borderRadius: 6,
+                fontSize: 14,
+                fontWeight: 600,
+                cursor: "pointer",
+              }}
+            >
+              Log in
+            </button>
           </s-section>
         </Form>
       </s-page>

@@ -57,10 +57,11 @@ function getEffectiveLayerIds(q: ColorQuestion | ThumbnailQuestion): string[] {
 
 // ─── Admin Image Dropdown ─────────────────────────────────────────────────────
 
-function AdminImageDropdown({ q, selectedVals, onToggle, qLabel }: {
+function AdminImageDropdown({ q, selectedVals, onToggle, onHoverImages, qLabel }: {
   q: DropdownQuestion;
   selectedVals: string[];
   onToggle: (val: string) => void;
+  onHoverImages?: (imgs: (string | null)[] | null) => void;
   qLabel: React.CSSProperties;
 }) {
   const [open, setOpen] = useState(false);
@@ -93,17 +94,20 @@ function AdminImageDropdown({ q, selectedVals, onToggle, qLabel }: {
         <span style={{ color: "#9ca3af", fontSize: 10 }}>{open ? "▲" : "▼"}</span>
       </button>
 
-      {open && <div style={{ position: "fixed", inset: 0, zIndex: 98 }} onClick={() => setOpen(false)} />}
+      {open && <div style={{ position: "fixed", inset: 0, zIndex: 98 }} onClick={() => { setOpen(false); onHoverImages?.(null); }} />}
 
       {open && (
         <div style={{ position: "absolute", top: "100%", left: 0, right: 0, zIndex: 99, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 8, boxShadow: "0 4px 20px rgba(0,0,0,0.12)", overflow: "hidden", marginTop: 4 }}>
           {q.options.map((o) => {
             const thumb = getThumb(o);
             const isSelected = selectedVals.includes(o.value);
+            const hasViewImages = (o as any).viewImages?.some(Boolean);
             return (
               <button
                 key={o.value}
                 onClick={() => { onToggle(o.value); if (!q.multipleSelection) setOpen(false); }}
+                onMouseEnter={() => hasViewImages ? onHoverImages?.((o as any).viewImages) : undefined}
+                onMouseLeave={() => onHoverImages?.(null)}
                 style={{ display: "flex", alignItems: "center", gap: 10, width: "100%", padding: "10px 14px", border: "none", cursor: "pointer", fontSize: 14, background: isSelected ? "#eff6ff" : "#fff", textAlign: "left", borderBottom: "1px solid #f3f4f6" }}
               >
                 {thumb ? (
@@ -137,12 +141,13 @@ export default function ConfiguratorPage() {
 
   const [currentView, setCurrentView] = useState(0);
 
-  // selectedAnswers drives conditional logic
+  // Image-type thumbnails pre-selected so the right base image shows immediately.
+  // Color/texture swatches NOT pre-selected — layers render their natural uploaded PNG.
   const [selectedAnswers, setSelectedAnswers] = useState<Record<string, string>>(() => {
     const init: Record<string, string> = {};
     for (const q of questions) {
-      if (q.type === "color" && q.swatches.length > 0) init[q.id] = q.swatches[0].value;
-      if (q.type === "thumbnail" && q.swatches.length > 0) init[q.id] = q.swatches[0].value;
+      if (q.type === "thumbnail" && (q as any).displayType === "image" && q.swatches.length > 0)
+        init[q.id] = q.swatches[0].value;
       if (q.type === "dropdown" && q.defaultValue) init[q.id] = q.defaultValue;
       if (q.type === "radio" && q.defaultValue) init[q.id] = q.defaultValue;
       if (q.type === "checkbox") init[q.id] = q.defaultChecked ? "true" : "false";
@@ -154,42 +159,20 @@ export default function ConfiguratorPage() {
   const [labelAnswerImages, setLabelAnswerImages] = useState<Record<string, (string | null)[]>>({});
   const [hoverViewImages, setHoverViewImages] = useState<(string | null)[] | null>(null);
 
-  const [layerColors, setLayerColors] = useState<Record<string, string>>(() => {
-    const init: Record<string, string> = {};
-    for (const l of layers) {
-      if (l.type === "colorable") init[l.id] = l.defaultColor || "#888";
-    }
-    for (const q of questions) {
-      if ((q.type === "color" || (q.type === "thumbnail" && (q as any).displayType !== "image")) && q.swatches.length > 0) {
-        for (const lid of getEffectiveLayerIds(q as ColorQuestion | ThumbnailQuestion)) {
-          init[lid] = q.swatches[0].value;
-        }
-      }
-    }
-    return init;
-  });
+  // Colors/textures start empty — applied only when user picks a swatch.
+  const [layerColors, setLayerColors] = useState<Record<string, string>>({});
+  const [layerTextures, setLayerTextures] = useState<Record<string, string>>({});
 
-  const [layerTextures, setLayerTextures] = useState<Record<string, string>>(() => {
-    const init: Record<string, string> = {};
-    for (const q of questions) {
-      if ((q.type === "color" || q.type === "thumbnail") && q.swatches.length > 0 && q.swatches[0].imageUrl) {
-        for (const lid of getEffectiveLayerIds(q as ColorQuestion | ThumbnailQuestion)) {
-          init[lid] = q.swatches[0].imageUrl!;
-        }
-      }
-    }
-    return init;
-  });
-
-  // layerImageOverrides: set by thumbnail-image questions to swap per-view images
+  // Image overrides pre-loaded from first swatch of image-type thumbnails so base product images show.
   const [layerImageOverrides, setLayerImageOverrides] = useState<Record<string, string[]>>(() => {
     const init: Record<string, string[]> = {};
     for (const q of questions) {
-      if (q.type === "thumbnail" && (q as any).displayType === "image" && q.linkedLayerId && q.swatches.length > 0) {
-        const first = q.swatches[0];
-        if (first.viewImages?.length) {
-          init[q.linkedLayerId] = first.viewImages.map((v) => v || "");
-        }
+      if (q.type !== "thumbnail" || (q as any).displayType !== "image") continue;
+      const layerIds = getEffectiveLayerIds(q as ThumbnailQuestion);
+      if (!layerIds.length || !q.swatches.length) continue;
+      const first = q.swatches[0];
+      if (first.viewImages?.length) {
+        for (const lid of layerIds) init[lid] = first.viewImages.map((v) => v || "");
       }
     }
     return init;
@@ -229,6 +212,17 @@ export default function ConfiguratorPage() {
 
   const [uploadedImages, setUploadedImages] = useState<Record<string, HTMLImageElement>>({});
   const [selectedId, setSelectedId] = useState<string | null>(null);
+
+  const [logoPositions, setLogoPositions] = useState<Record<string, { x: number; y: number }>>(() => {
+    const init: Record<string, { x: number; y: number }> = {};
+    for (const q of questions) {
+      if (q.type === "file") {
+        const fq = q as any;
+        init[q.id] = { x: (fq.position?.x ?? 100) * COORD_SCALE, y: (fq.position?.y ?? 100) * COORD_SCALE };
+      }
+    }
+    return init;
+  });
 
   useEffect(() => {
     if (!transformerRef.current) return;
@@ -449,10 +443,23 @@ export default function ConfiguratorPage() {
                 const toggleVal = (val: string) => {
                   if (dq.multipleSelection) {
                     const cur = (selectedAnswers[q.id] ?? "").split(",").filter(Boolean);
-                    const next = cur.includes(val) ? cur.filter((v) => v !== val) : [...cur, val];
+                    const isRemoving = cur.includes(val);
+                    const next = isRemoving ? cur.filter((v) => v !== val) : [...cur, val];
                     setSelectedAnswers((p) => ({ ...p, [q.id]: next.join(",") }));
+                    const opt = dq.options.find((o) => o.value === val);
+                    if (!isRemoving && (opt as any)?.viewImages?.some(Boolean)) {
+                      setLabelAnswerImages((p) => ({ ...p, [q.id]: (opt as any).viewImages }));
+                    } else if (isRemoving && next.length === 0) {
+                      setLabelAnswerImages((p) => { const n = { ...p }; delete n[q.id]; return n; });
+                    }
                   } else {
                     setSelectedAnswers((p) => ({ ...p, [q.id]: val }));
+                    const opt = dq.options.find((o) => o.value === val);
+                    if ((opt as any)?.viewImages?.some(Boolean)) {
+                      setLabelAnswerImages((p) => ({ ...p, [q.id]: (opt as any).viewImages }));
+                    } else {
+                      setLabelAnswerImages((p) => { const n = { ...p }; delete n[q.id]; return n; });
+                    }
                   }
                 };
                 return (
@@ -461,6 +468,7 @@ export default function ConfiguratorPage() {
                     q={dq}
                     selectedVals={selectedVals}
                     onToggle={toggleVal}
+                    onHoverImages={setHoverViewImages}
                     qLabel={qLabel}
                   />
                 );
@@ -628,38 +636,83 @@ export default function ConfiguratorPage() {
               />
             ))}
 
-            {fileQuestions.map((q) =>
-              uploadedImages[q.id] ? (
+            {fileQuestions.map((q) => {
+              const img = uploadedImages[q.id];
+              if (!img) return null;
+              const fq = q as any;
+              const pos = logoPositions[q.id] ?? { x: (fq.position?.x ?? 100) * COORD_SCALE, y: (fq.position?.y ?? 100) * COORD_SCALE };
+              return (
                 <KonvaImage
                   key={q.id}
                   ref={(node) => { if (node) nodeRefs[q.id] = node; }}
-                  image={uploadedImages[q.id]}
-                  x={q.position.x * COORD_SCALE}
-                  y={q.position.y * COORD_SCALE}
-                  width={q.defaultWidth * COORD_SCALE}
-                  height={q.defaultHeight * COORD_SCALE}
+                  image={img}
+                  x={pos.x}
+                  y={pos.y}
+                  width={(fq.defaultWidth ?? 120) * COORD_SCALE}
+                  height={(fq.defaultHeight ?? 120) * COORD_SCALE}
                   draggable
                   onClick={() => setSelectedId(q.id)}
                   onTap={() => setSelectedId(q.id)}
+                  onDragEnd={(e) => setLogoPositions((p) => ({ ...p, [q.id]: { x: e.target.x(), y: e.target.y() } }))}
                 />
-              ) : null,
-            )}
+              );
+            })}
 
             <Transformer ref={transformerRef} boundBoxFunc={(old, nw) => (nw.width < 20 || nw.height < 20 ? old : nw)} />
           </KonvaLayer>
         </Stage>
 
-        {/* View navigation dots */}
+        {/* View navigation dots with prev/next arrows */}
         {numViews > 1 && (
-          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            {Array.from({ length: numViews }).map((_, vi) => (
-              <button
-                key={vi}
-                onClick={() => setCurrentView(vi)}
-                style={{ width: vi === currentView ? 22 : 10, height: 10, borderRadius: 5, background: vi === currentView ? "#111827" : "#d1d5db", border: "none", cursor: "pointer", padding: 0, transition: "width 0.15s" }}
-                title={`View ${vi + 1}`}
-              />
-            ))}
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <button
+              onClick={() => setCurrentView((v) => Math.max(0, v - 1))}
+              disabled={currentView === 0}
+              style={{
+                width: 32, height: 32, borderRadius: "50%",
+                border: "1.5px solid #d1d5db",
+                background: currentView === 0 ? "#f3f4f6" : "#fff",
+                cursor: currentView === 0 ? "default" : "pointer",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                opacity: currentView === 0 ? 0.4 : 1,
+                transition: "opacity 0.15s", flexShrink: 0,
+              }}
+              aria-label="Previous view"
+            >
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                <path d="M9 2L4 7l5 5" stroke="#111827" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </button>
+
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              {Array.from({ length: numViews }).map((_, vi) => (
+                <button
+                  key={vi}
+                  onClick={() => setCurrentView(vi)}
+                  style={{ width: vi === currentView ? 22 : 10, height: 10, borderRadius: 5, background: vi === currentView ? "#111827" : "#d1d5db", border: "none", cursor: "pointer", padding: 0, transition: "width 0.15s" }}
+                  title={`View ${vi + 1}`}
+                />
+              ))}
+            </div>
+
+            <button
+              onClick={() => setCurrentView((v) => Math.min(numViews - 1, v + 1))}
+              disabled={currentView === numViews - 1}
+              style={{
+                width: 32, height: 32, borderRadius: "50%",
+                border: "1.5px solid #d1d5db",
+                background: currentView === numViews - 1 ? "#f3f4f6" : "#fff",
+                cursor: currentView === numViews - 1 ? "default" : "pointer",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                opacity: currentView === numViews - 1 ? 0.4 : 1,
+                transition: "opacity 0.15s", flexShrink: 0,
+              }}
+              aria-label="Next view"
+            >
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                <path d="M5 2l5 5-5 5" stroke="#111827" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/>
+              </svg>
+            </button>
           </div>
         )}
       </div>

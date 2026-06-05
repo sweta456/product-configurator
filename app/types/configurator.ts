@@ -57,6 +57,64 @@ export interface ColorSwatch {
 
 export type Condition = { questionId: string; value: string };
 
+export interface ConfiguratorStyle {
+  swatchShape: "circle" | "rounded" | "square";
+  swatchSize: "sm" | "md" | "lg";
+  thumbnailShape: "circle" | "rounded" | "square";
+  thumbnailSize: "sm" | "md" | "lg";
+  choiceStyle: "pill" | "card" | "classic";
+  accentColor: string;
+  buttonRadius: "default" | "pill" | "square";
+  showLabels: boolean;
+}
+
+export const DEFAULT_STYLE: ConfiguratorStyle = {
+  swatchShape: "rounded",
+  swatchSize: "md",
+  thumbnailShape: "rounded",
+  thumbnailSize: "md",
+  choiceStyle: "pill",
+  accentColor: "#5c6ac4",
+  buttonRadius: "default",
+  showLabels: false,
+};
+
+export interface AppSettings {
+  globalTextColor: string;
+  swatchShape: "circle" | "rounded" | "square";
+  swatchSize: "sm" | "md" | "lg";
+  spaceBetweenOptions: number;
+  marginTop: number;
+  marginLeft: number;
+  marginRight: number;
+  marginBottom: number;
+  optionFieldLeftMargin: number;
+  subOptionLeftMargin: number;
+  disableZoom: boolean;
+  disableShadow: boolean;
+  cartAction: "redirect_cart" | "open_cart" | "nothing";
+  tempProductLifetime: "15min" | "30min" | "1h" | "2h" | "4h" | "never";
+  tempProductPrefix: string;
+}
+
+export const DEFAULT_APP_SETTINGS: AppSettings = {
+  globalTextColor: "#333333",
+  swatchShape: "rounded",
+  swatchSize: "md",
+  spaceBetweenOptions: 10,
+  marginTop: 8,
+  marginLeft: 0,
+  marginRight: 0,
+  marginBottom: 8,
+  optionFieldLeftMargin: 10,
+  subOptionLeftMargin: 55,
+  disableZoom: false,
+  disableShadow: false,
+  cartAction: "redirect_cart",
+  tempProductLifetime: "30min",
+  tempProductPrefix: "[CUSTOM]",
+};
+
 export interface ColorQuestion {
   id: string;
   name: string;
@@ -116,6 +174,15 @@ export interface PrintArea {
   y: number;
 }
 
+export interface LogoAnswer {
+  id: string;
+  label: string;
+  imageUrl?: string;
+  thumbnailUrl?: string;
+  description?: string;
+  productionCode?: string;
+}
+
 export interface FileQuestion {
   id: string;
   name: string;
@@ -126,6 +193,7 @@ export interface FileQuestion {
   defaultHeight: number;
   printAreas?: PrintArea[];
   allowedTransforms?: { move: boolean; resize: boolean; rotate: boolean };
+  answers?: LogoAnswer[];
   conditions?: Condition[];
 }
 

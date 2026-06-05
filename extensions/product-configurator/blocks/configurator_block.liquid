@@ -3,7 +3,6 @@
   if base_url == blank
     assign base_url = app.url
   endif
-
   assign configurator_url = ''
   if base_url != blank and product
     assign configurator_url = base_url | append: '/configurator/' | append: product.id | append: '?shop=' | append: shop.permanent_domain
@@ -11,16 +10,20 @@
 -%}
 
 {%- if product == blank -%}
+  {%- if request.design_mode -%}
   <div style="padding:14px 16px;border:2px dashed #f59e0b;border-radius:8px;background:#fffbeb;font-family:sans-serif;">
-    <p style="margin:0;font-size:13px;font-weight:600;color:#92400e;">⚠️ Wrong section</p>
-    <p style="margin:4px 0 0;font-size:12px;color:#78350f;">This block must be placed inside a Product page section, not a general page.</p>
+    <p style="margin:0;font-size:13px;font-weight:600;color:#92400e;">⚠️ Theme editor only — Wrong section</p>
+    <p style="margin:4px 0 0;font-size:12px;color:#78350f;">This block must be placed inside a <strong>Product page</strong> section, not a general page.</p>
   </div>
+  {%- endif -%}
 {%- elsif product.tags contains 'configurator-enabled' -%}
   {%- if configurator_url == blank -%}
+  {%- if request.design_mode -%}
   <div style="padding:14px 16px;border:2px dashed #ef4444;border-radius:8px;background:#fef2f2;font-family:sans-serif;">
-    <p style="margin:0;font-size:13px;font-weight:600;color:#991b1b;">⚠️ App not connected</p>
-    <p style="margin:4px 0 0;font-size:12px;color:#7f1d1d;">Enter your app URL in the <strong>App URL Override</strong> field in this block's settings panel (e.g. <code>https://your-ngrok-url.ngrok-free.app</code>).</p>
+    <p style="margin:0;font-size:13px;font-weight:600;color:#991b1b;">⚠️ Development only — App URL not detected</p>
+    <p style="margin:4px 0 0;font-size:12px;color:#7f1d1d;">If testing locally, paste your ngrok URL in the <strong>Dev URL Override</strong> field below.<br>In production this resolves automatically — no action needed.</p>
   </div>
+  {%- endif -%}
   {%- else -%}
 
 <div
@@ -55,16 +58,39 @@
     {{ block.settings.button_text }}
   </button>
 
+  <!-- ── Modal Styles ───────────────────────────────────────── -->
+  <style>
+    @keyframes cf-overlay-in-{{ product.id }} {
+      from { opacity: 0; }
+      to   { opacity: 1; }
+    }
+    @keyframes cf-modal-in-{{ product.id }} {
+      from { opacity: 0; transform: scale(0.96) translateY(12px); }
+      to   { opacity: 1; transform: scale(1) translateY(0); }
+    }
+    #configurator-modal-{{ product.id }}.cf-open {
+      animation: cf-overlay-in-{{ product.id }} 0.18s ease forwards;
+    }
+    #configurator-modal-{{ product.id }}.cf-open .cf-modal-box {
+      animation: cf-modal-in-{{ product.id }} 0.26s cubic-bezier(0.34, 1.4, 0.64, 1) forwards;
+    }
+    #close-configurator-{{ product.id }}:hover {
+      background: #e5e7eb !important;
+    }
+    @media (max-width: 600px) {
+      #configurator-modal-{{ product.id }} .cf-modal-box {
+        width: 100vw !important;
+        height: 100dvh !important;
+        border-radius: 0 !important;
+        max-width: 100vw !important;
+      }
+    }
+  </style>
+
   <!-- ── Modal Overlay ────────────────────────────────────────── -->
-  <div id="configurator-modal-{{ product.id }}" style="display: none; position: fixed; inset: 0; z-index: 9999; background: rgba(0,0,0,0.55); align-items: center; justify-content: center;">
-    <div style="position: relative; width: min(960px, 96vw); height: min(720px, 92vh); background: #fff; border-radius: 12px; overflow: hidden; box-shadow: 0 20px 60px rgba(0,0,0,0.35); display: flex; flex-direction: column;">
-
-      <div style="display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; border-bottom: 1px solid #e5e7eb; flex-shrink: 0;">
-        <span style="font-weight: 700; font-size: 15px;">Customise Your {{ product.title }}</span>
-        <button id="close-configurator-{{ product.id }}" type="button" style="background: none; border: none; font-size: 22px; cursor: pointer; color: #6b7280; line-height: 1; padding: 2px 6px;" aria-label="Close">&times;</button>
-      </div>
-
-      <iframe id="configurator-iframe-{{ product.id }}" src="about:blank" data-src="{{ configurator_url }}" style="flex: 1; border: none; display: block;" title="Product Configurator" allow="clipboard-write"></iframe>
+  <div id="configurator-modal-{{ product.id }}" style="display: none; position: fixed; inset: 0; z-index: 9999; background: rgba(0,0,0,0.65); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); align-items: center; justify-content: center;">
+    <div class="cf-modal-box" style="position: relative; width: min(1280px, 98vw); height: min(900px, 96vh); background: #fff; border-radius: 16px; overflow: hidden; box-shadow: 0 32px 80px rgba(0,0,0,0.4), 0 8px 32px rgba(0,0,0,0.15); display: flex; flex-direction: column;">
+      <iframe id="configurator-iframe-{{ product.id }}" src="about:blank" data-src="{{ configurator_url }}" style="flex: 1; min-height: 0; border: none; display: block; width: 100%;" title="Product Configurator" allow="clipboard-write"></iframe>
     </div>
   </div>
 
@@ -78,7 +104,6 @@
 
   var openBtn  = document.getElementById('open-configurator-'  + productId);
   var modal    = document.getElementById('configurator-modal-' + productId);
-  var closeBtn = document.getElementById('close-configurator-' + productId);
   var iframe   = document.getElementById('configurator-iframe-'+ productId);
 
   if (!openBtn || !modal) return;
@@ -105,20 +130,22 @@
       iframe.src = configUrl;
     }
     modal.style.display = 'flex';
+    requestAnimationFrame(function() { modal.classList.add('cf-open'); });
     document.body.style.overflow = 'hidden';
   }
 
   function closeModal() {
+    modal.classList.remove('cf-open');
     modal.style.display = 'none';
     document.body.style.overflow = '';
   }
 
   openBtn.addEventListener('click', openModal);
-  closeBtn.addEventListener('click', closeModal);
   modal.addEventListener('click', function (e) { if (e.target === modal) closeModal(); });
   document.addEventListener('keydown', function (e) { if (e.key === 'Escape' && modal.style.display !== 'none') closeModal(); });
 
   window.addEventListener('message', function (event) {
+    if (event.data && event.data.type === 'configurator:close') { closeModal(); return; }
     if (!event.data || event.data.type !== 'configurator:add-to-cart') return;
 
     var properties = event.data.properties || {};
@@ -143,6 +170,13 @@
 })();
 </script>
 
+  {%- endif -%}
+{%- else -%}
+  {%- if request.design_mode -%}
+  <div style="padding:14px 16px;border:2px dashed #6366f1;border-radius:8px;background:#eef2ff;font-family:sans-serif;">
+    <p style="margin:0;font-size:13px;font-weight:600;color:#3730a3;">ℹ️ Product not configured yet</p>
+    <p style="margin:4px 0 0;font-size:12px;color:#4338ca;">Open the <strong>Product Configurator</strong> app, select this product, build its configurator and click <strong>Save</strong>. The Customize button will appear automatically once it's set up.</p>
+  </div>
   {%- endif -%}
 {%- endif -%}
 
@@ -185,8 +219,8 @@
     {
       "type": "text",
       "id": "app_url_override",
-      "label": "App URL Override",
-      "info": "Paste your app URL here (e.g. https://xxxx.ngrok-free.app). Required during development. Leave blank in production once the app is deployed."
+      "label": "Dev URL Override (optional)",
+      "info": "Leave blank in production — the URL is set automatically. Only needed when testing locally with ngrok (e.g. https://xxxx.ngrok-free.app)."
     }
   ]
 }

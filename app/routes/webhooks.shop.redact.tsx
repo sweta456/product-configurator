@@ -2,13 +2,12 @@ import type { ActionFunctionArgs } from "react-router";
 import { authenticate } from "../shopify.server";
 import db from "../db.server";
 
+// Shopify sends this 48 days after a shop uninstalls the app.
+// Final cleanup — remove any remaining shop data.
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { shop, topic } = await authenticate.webhook(request);
+  const { topic, shop } = await authenticate.webhook(request);
+  console.log(`${topic} for shop ${shop} — final data purge`);
 
-  console.log(`Received ${topic} webhook for ${shop}`);
-
-  // Delete all data for this shop on uninstall
-  await db.session.deleteMany({ where: { shop } });
   await db.productConfig.deleteMany({ where: { shop } });
   await db.configurator.deleteMany({ where: { shop } });
   await db.appSettings.deleteMany({ where: { shop } });
