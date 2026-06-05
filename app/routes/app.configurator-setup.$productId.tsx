@@ -3707,7 +3707,8 @@ export default function BuilderPage() {
           )}
 
           {mounted ? (
-            <div style={{ position: "relative", borderRadius: 6, overflow: "hidden", background: "repeating-conic-gradient(#d1d5db 0% 25%, #e5e7eb 0% 50%) 0 0 / 16px 16px" }}>
+            <div style={{ position: "relative", borderRadius: 6, overflow: "hidden" }}>
+              {/*background: "repeating-conic-gradient(#d1d5db 0% 25%, #e5e7eb 0% 50%) 0 0 / 16px 16px" */}
               {layers.length === 0 && (
                 <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 10, color: "#9ca3af", zIndex: 1, pointerEvents: "none" }}>
                   <div style={{ fontSize: 40 }}>🎨</div>
