@@ -89,7 +89,7 @@
 
   <!-- ── Modal Overlay ────────────────────────────────────────── -->
   <div id="configurator-modal-{{ product.id }}" style="display: none; position: fixed; inset: 0; z-index: 9999; background: rgba(0,0,0,0.65); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); align-items: center; justify-content: center;">
-    <div class="cf-modal-box" style="position: relative; width: min(1280px, 98vw); height: min(900px, 96vh); background: #fff; border-radius: 16px; overflow: hidden; box-shadow: 0 32px 80px rgba(0,0,0,0.4), 0 8px 32px rgba(0,0,0,0.15); display: flex; flex-direction: column;">
+    <div class="cf-modal-box" style="position: relative; width: min(1280px, 98vw); height: min(900px, 84vh); background: #fff; border-radius: 16px; overflow: hidden; box-shadow: 0 32px 80px rgba(0,0,0,0.4), 0 8px 32px rgba(0,0,0,0.15); display: flex; flex-direction: column;">
       <iframe id="configurator-iframe-{{ product.id }}" src="about:blank" data-src="{{ configurator_url }}" style="flex: 1; min-height: 0; border: none; display: block; width: 100%;" title="Product Configurator" allow="clipboard-write"></iframe>
     </div>
   </div>
