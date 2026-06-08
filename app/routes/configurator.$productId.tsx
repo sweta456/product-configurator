@@ -8,7 +8,6 @@ import {
   Transformer,
 } from "react-konva";
 import ProductLayer from "../components/ProductLayer";
-import { ColorPickerPopup } from "../components/ModernColorPicker";
 import prisma from "../db.server";
 import {
   type LayerConfig,
@@ -18,8 +17,10 @@ import {
   type DropdownQuestion,
   type GroupQuestion,
   type ConfiguratorStyle,
+  type LogicRule,
   getLayerSrc,
   migrateOptions,
+  evaluateLogicRules,
   DEFAULT_STYLE,
 } from "../types/configurator";
 
@@ -64,7 +65,8 @@ export async function loader({ request, params }: any) {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function isVisible(q: Question, selectedAnswers: Record<string, string>): boolean {
+function isVisible(q: Question, selectedAnswers: Record<string, string>, hiddenQuestions?: Set<string>): boolean {
+  if (hiddenQuestions?.has(q.id)) return false;
   if (!q.conditions?.length) return true;
   return q.conditions.every((c) => selectedAnswers[c.questionId] === c.value);
 }
@@ -401,19 +403,16 @@ export default function StorefrontConfiguratorPage() {
 
   const layers: LayerConfig[] = (config?.layers as LayerConfig[]) ?? [];
   const questions: Question[] = migrateOptions(config?.options, layers);
+  const logicRules: LogicRule[] = (config?.options as any)?.logicRules ?? [];
   const numViews: number = (config?.options as any)?.numViews ?? 1;
 
   const [currentView, setCurrentView] = useState(0);
 
-  // Image-type thumbnails are pre-selected so layerImageOverrides shows the right base image.
-  // Color swatches and non-image thumbnails are NOT pre-selected so no flat color is applied.
   const [selectedAnswers, setSelectedAnswers] = useState<Record<string, string>>(() => {
     const init: Record<string, string> = {};
     for (const q of questions) {
-      if ((q.type === "thumbnail" || q.type === "color") && q.swatches.length > 0) {
-        // Always pre-select first swatch so the selection ring is visible on load
+      if (q.type === "thumbnail" && (q as any).displayType === "image" && q.swatches.length > 0)
         init[q.id] = q.swatches[0].value;
-      }
       if (q.type === "dropdown" && q.defaultValue) init[q.id] = q.defaultValue;
       if (q.type === "radio" && q.defaultValue) init[q.id] = q.defaultValue;
       if (q.type === "checkbox") init[q.id] = q.defaultChecked ? "true" : "false";
@@ -421,32 +420,18 @@ export default function StorefrontConfiguratorPage() {
     return init;
   });
 
-  const [layerColors, setLayerColors] = useState<Record<string, string>>(() => {
-    const init: Record<string, string> = {};
-    for (const q of questions) {
-      if ((q.type === "thumbnail" || q.type === "color") && q.swatches.length > 0) {
-        const first = q.swatches[0];
-        const hasViewImages = first.viewImages?.some(Boolean);
-        const dt = (q as any).displayType ?? "color";
-        if (dt === "image" || hasViewImages) continue; // image-based: handled by layerImageOverrides
-        const layerIds = getEffectiveLayerIds(q as ColorQuestion | ThumbnailQuestion);
-        for (const lid of layerIds) init[lid] = first.value;
-      }
-    }
-    return init;
-  });
+  // Colors start empty — applied only when customer picks a swatch.
+  const [layerColors, setLayerColors] = useState<Record<string, string>>({});
 
   const [layerImageOverrides, setLayerImageOverrides] = useState<Record<string, string[]>>(() => {
     const init: Record<string, string[]> = {};
     for (const q of questions) {
-      if ((q.type === "thumbnail" || q.type === "color") && q.swatches.length > 0) {
-        const first = q.swatches[0];
-        const hasViewImages = first.viewImages?.some(Boolean);
-        if (!hasViewImages) continue;
-        const views = first.viewImages!.map((v) => v || "");
-        for (const layerId of getEffectiveLayerIds(q as ThumbnailQuestion)) {
-          init[layerId] = views;
-        }
+      if (q.type !== "thumbnail" || (q as any).displayType !== "image") continue;
+      const layerIds = getEffectiveLayerIds(q as ThumbnailQuestion);
+      if (!layerIds.length || !q.swatches.length) continue;
+      const first = q.swatches[0];
+      if (first.viewImages?.length) {
+        for (const lid of layerIds) init[lid] = first.viewImages.map((v) => v || "");
       }
     }
     return init;
@@ -470,8 +455,21 @@ export default function StorefrontConfiguratorPage() {
   });
   const [hoverViewImages, setHoverViewImages] = useState<(string | null)[] | null>(null);
 
-  // Empty on init — textures only applied when user actively picks a swatch.
-  const [layerTextures, setLayerTextures] = useState<Record<string, string>>({});
+  const [layerTextures, setLayerTextures] = useState<Record<string, string>>(() => {
+    const init: Record<string, string> = {};
+    for (const q of questions) {
+      if ((q.type === "color" || q.type === "thumbnail") && q.swatches.length > 0) {
+        const isImageWithViews = q.type === "thumbnail" && (q as any).displayType === "image" && q.swatches[0].viewImages?.some(Boolean);
+        if (isImageWithViews) continue;
+        const first = q.swatches[0];
+        if (!(first as any).imageUrl) continue;
+        const allIds = getEffectiveLayerIds(q as any);
+        const layerIds = allIds.filter((id) => !questions.some((tq) => tq.id === id && tq.type === "text"));
+        for (const lid of layerIds) init[lid] = (first as any).imageUrl;
+      }
+    }
+    return init;
+  });
 
   const [textValues, setTextValues] = useState<Record<string, string>>(() => {
     const init: Record<string, string> = {};
@@ -484,7 +482,14 @@ export default function StorefrontConfiguratorPage() {
   const [textColors, setTextColors] = useState<Record<string, string>>(() => {
     const init: Record<string, string> = {};
     for (const q of questions) {
-      if (q.type === "text") init[q.id] = q.defaultColor;
+      if ((q.type === "color" || q.type === "thumbnail") && q.swatches.length > 0) {
+        const isImageWithViews = q.type === "thumbnail" && (q as any).displayType === "image" && q.swatches[0].viewImages?.some(Boolean);
+        if (isImageWithViews) continue;
+        const allIds = getEffectiveLayerIds(q as any);
+        for (const id of allIds) {
+          if (questions.some((tq) => tq.id === id && tq.type === "text")) init[id] = q.swatches[0].value;
+        }
+      }
     }
     return init;
   });
@@ -587,23 +592,47 @@ export default function StorefrontConfiguratorPage() {
 
   const handleColorSwatchClick = (q: ColorQuestion | ThumbnailQuestion, swatchValue: string, swatchImageUrl?: string) => {
     setSelectedAnswers((p) => ({ ...p, [q.id]: swatchValue }));
-    const layerIds = getEffectiveLayerIds(q);
-    if (!layerIds.length) return;
+    const allIds = getEffectiveLayerIds(q);
+    if (!allIds.length) return;
 
     const dt = (q as any).displayType ?? "color";
-    const swatch = q.swatches.find((s) => s.value === swatchValue);
-    const viewImages = swatch?.viewImages ?? [];
-    const hasViewImages = viewImages.some(Boolean);
 
-    if (dt === "image" || hasViewImages) {
-      // Use per-view pre-rendered images (covers both image-type and color-type swatches with viewImages)
+    if (dt === "image") {
+      const swatch = q.swatches.find((s) => s.value === swatchValue);
+      const viewImages = (swatch?.viewImages ?? []).map((v) => v || "");
       setLayerImageOverrides((p) => {
         const next = { ...p };
-        for (const lid of layerIds) next[lid] = viewImages.map((v) => v || "");
+        for (const lid of allIds) next[lid] = viewImages;
+        return next;
+      });
+      setLayerColors((p) => {
+        const next = { ...p };
+        for (const lid of allIds) delete next[lid];
+        return next;
+      });
+      setLayerTextures((p) => {
+        const next = { ...p };
+        for (const lid of allIds) delete next[lid];
         return next;
       });
     } else {
-      // Flat hex color with optional texture
+      // Separate text-question IDs (color → textColors) from layer IDs (color → layerColors)
+      const textIds = allIds.filter((id) => questions.some((tq) => tq.id === id && tq.type === "text"));
+      const layerIds = allIds.filter((id) => !textIds.includes(id));
+
+      if (textIds.length > 0) {
+        setTextColors((p) => {
+          const next = { ...p };
+          for (const tid of textIds) next[tid] = swatchValue;
+          return next;
+        });
+      }
+
+      setLayerImageOverrides((p) => {
+        const next = { ...p };
+        for (const lid of layerIds) delete next[lid];
+        return next;
+      });
       setLayerColors((p) => {
         const next = { ...p };
         for (const lid of layerIds) next[lid] = swatchValue;
@@ -704,8 +733,11 @@ export default function StorefrontConfiguratorPage() {
     }, 80);
   };
 
+  // Evaluate logic rules to determine which questions are hidden
+  const { hiddenQuestions } = evaluateLogicRules(logicRules, selectedAnswers);
+
   const visibleQuestions = questions.filter((q) => {
-    if (!isVisible(q, selectedAnswers)) return false;
+    if (!isVisible(q, selectedAnswers, hiddenQuestions)) return false;
     if ((q.type === "radio" || q.type === "dropdown") && !(q as any).options?.length) return false;
     if ((q.type === "color" || q.type === "thumbnail") && !(q as any).swatches?.length) return false;
     return true;
@@ -720,7 +752,7 @@ export default function StorefrontConfiguratorPage() {
   const groupedChildIds = new Set(allGroupQuestions.flatMap((g) => g.childIds));
 
   const sidebarGroups = allGroupQuestions
-    .filter((g) => isVisible(g, selectedAnswers))
+    .filter((g) => isVisible(g, selectedAnswers, hiddenQuestions))
     .map((g) => ({
       group: g,
       children: g.childIds
@@ -1003,36 +1035,35 @@ export default function StorefrontConfiguratorPage() {
     );
 
     // ── Text input ──
-    if (q.type === "text") return (
-      <QuestionBlock key={q.id} label={q.name} isFirst={qi === 0}>
-        <input
-          value={textValues[q.id] ?? q.defaultText}
-          onChange={(e) => setTextValues((p) => ({ ...p, [q.id]: e.target.value }))}
-          placeholder={q.defaultText || "Enter text…"}
-          style={{ width: "100%", padding: "10px 12px", border: `1.5px solid var(--cf-border)`, borderRadius: "var(--cf-radius)", fontSize: 13, boxSizing: "border-box", background: "var(--cf-surface)", color: "var(--cf-text)", outline: "none", boxShadow: "var(--cf-shadow-sm)", transition: "border-color var(--cf-transition)" }}
-          onFocus={(e) => (e.target.style.borderColor = "var(--cf-accent)")}
-          onBlur={(e) => (e.target.style.borderColor = "var(--cf-border)")}
-        />
-        <div style={{ display: "flex", gap: 10, marginTop: 10, alignItems: "flex-end" }}>
-          <div>
-            <div style={{ fontSize: 11, color: "var(--cf-text-muted)", marginBottom: 5, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em" }}>Colour</div>
-            <ColorPickerPopup value={textColors[q.id] ?? q.defaultColor} onChange={(hex) => setTextColors((p) => ({ ...p, [q.id]: hex }))} />
+    if (q.type === "text") {
+      const maxChars = (q as any).maxChars ?? 15;
+      const currentLen = (textValues[q.id] ?? q.defaultText ?? "").length;
+      const atLimit = currentLen >= maxChars;
+      const pa = (q as any).printArea;
+      return (
+        <QuestionBlock key={q.id} label={q.name} isFirst={qi === 0}>
+          <div style={{ position: "relative" }}>
+            <textarea
+              value={textValues[q.id] ?? q.defaultText}
+              onChange={(e) => setTextValues((p) => ({ ...p, [q.id]: e.target.value }))}
+              placeholder={q.defaultText || "Enter text…"}
+              maxLength={maxChars}
+              rows={3}
+              style={{ width: "100%", padding: "10px 12px", border: `1.5px solid var(--cf-border)`, borderRadius: "var(--cf-radius)", fontSize: 13, boxSizing: "border-box", background: "var(--cf-surface)", color: "var(--cf-text)", outline: "none", boxShadow: "var(--cf-shadow-sm)", transition: "border-color var(--cf-transition)", resize: "vertical", fontFamily: "inherit", lineHeight: 1.5 }}
+              onFocus={(e) => {
+                e.target.style.borderColor = "var(--cf-accent)";
+                if (pa?.visibleViews?.length > 0)
+                  setCurrentView(Math.min(pa.visibleViews[0] - 1, numViews - 1));
+              }}
+              onBlur={(e) => (e.target.style.borderColor = "var(--cf-border)")}
+            />
+            <span style={{ position: "absolute", bottom: 6, right: 8, fontSize: 11, color: atLimit ? "#ef4444" : "var(--cf-text-muted)", fontWeight: atLimit ? 600 : 400, pointerEvents: "none" }}>
+              {currentLen}/{maxChars}
+            </span>
           </div>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 11, color: "var(--cf-text-muted)", marginBottom: 5, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.04em" }}>Size: {textSizes[q.id] ?? q.defaultFontSize}px</div>
-            <input type="range" min={14} max={120} value={textSizes[q.id] ?? q.defaultFontSize} onChange={(e) => setTextSizes((p) => ({ ...p, [q.id]: Number(e.target.value) }))} style={{ width: "100%", accentColor: "var(--cf-accent)" }} />
-          </div>
-        </div>
-        <div style={{ position: "relative", marginTop: 8 }}>
-          <select value={textFonts[q.id] ?? q.defaultFontFamily} onChange={(e) => setTextFonts((p) => ({ ...p, [q.id]: e.target.value }))} style={{ width: "100%", padding: "8px 32px 8px 10px", border: `1.5px solid var(--cf-border)`, borderRadius: "var(--cf-radius-sm)", fontSize: 12, appearance: "none", background: "var(--cf-surface)", color: "var(--cf-text)", cursor: "pointer" }}>
-            {["Arial", "Georgia", "Impact", "Verdana", "Courier New", "Times New Roman"].map((f) => <option key={f} value={f}>{f}</option>)}
-          </select>
-          <svg width="10" height="10" viewBox="0 0 12 12" fill="none" style={{ position: "absolute", right: 10, top: "50%", transform: "translateY(-50%)", pointerEvents: "none" }}>
-            <path d="M2 4l4 4 4-4" stroke="var(--cf-text-muted)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
-          </svg>
-        </div>
-      </QuestionBlock>
-    );
+        </QuestionBlock>
+      );
+    }
 
     // ── File upload ──
     if (q.type === "file") return (
@@ -1086,12 +1117,26 @@ export default function StorefrontConfiguratorPage() {
               <div style={{ fontSize: 10, color: "var(--cf-text-muted)", fontWeight: 500, marginTop: 1 }}>Personalise your product</div>
             </div>
           </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 6, background: "var(--cf-accent-light)", borderRadius: 20, padding: "4px 10px" }}>
-            <div style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--cf-accent)" }} />
-            <span style={{ fontSize: 10.5, color: "var(--cf-accent)", fontWeight: 700, letterSpacing: "0.06em", textTransform: "uppercase" }}>
-              Customize
-            </span>
-          </div>
+          <button
+            onClick={() => window.parent.postMessage({ type: 'configurator:close' }, '*')}
+            aria-label="Close configurator"
+            style={{
+              width: 32, height: 32,
+              border: `1.5px solid var(--cf-border)`,
+              borderRadius: "50%",
+              background: "var(--cf-surface)",
+              cursor: "pointer",
+              display: "flex", alignItems: "center", justifyContent: "center",
+              flexShrink: 0,
+              transition: "background var(--cf-transition), border-color var(--cf-transition)",
+            }}
+            onMouseEnter={(e) => { (e.currentTarget as HTMLButtonElement).style.background = "#f3f4f6"; (e.currentTarget as HTMLButtonElement).style.borderColor = "var(--cf-border-hover)"; }}
+            onMouseLeave={(e) => { (e.currentTarget as HTMLButtonElement).style.background = "var(--cf-surface)"; (e.currentTarget as HTMLButtonElement).style.borderColor = "var(--cf-border)"; }}
+          >
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
+              <path d="M1 1l10 10M11 1L1 11" stroke="var(--cf-text)" strokeWidth="1.8" strokeLinecap="round"/>
+            </svg>
+          </button>
         </div>
 
         {/* ── Body ── */}
@@ -1254,38 +1299,49 @@ export default function StorefrontConfiguratorPage() {
                       let src: string;
                       if (overrideImages) {
                         const slot = overrideImages[currentView];
-                        src = (slot != null && slot !== "") ? slot : (overrideImages.find((s) => s !== "" && s != null) ?? getLayerSrc(layer, currentView));
+                        const baseSrc = getLayerSrc(layer, currentView);
+                        src = (slot != null && slot !== "") ? slot : (baseSrc || overrideImages.find((s) => s !== "" && s != null) || "");
                       } else {
                         src = getLayerSrc(layer, currentView);
                       }
-                      const isColorable = layer.type === "colorable";
                       return (
                         <ProductLayer
                           key={layer.id}
                           src={src}
-                          color={isColorable ? layerColors[layer.id] : undefined}
-                          textureUrl={isColorable ? layerTextures[layer.id] : undefined}
+                          color={layerColors[layer.id]}
+                          textureUrl={layerTextures[layer.id]}
                           width={CANVAS_SIZE}
                           height={CANVAS_SIZE}
                         />
                       );
                     })}
 
-                    {textQuestions.map((q) => (
-                      <KonvaText
-                        key={q.id}
-                        ref={(node: any) => { if (node) nodeRefs[q.id] = node; }}
-                        text={textValues[q.id] ?? q.defaultText}
-                        x={q.position.x * COORD_SCALE}
-                        y={q.position.y * COORD_SCALE}
-                        fontSize={(textSizes[q.id] ?? q.defaultFontSize) * COORD_SCALE}
-                        fontFamily={textFonts[q.id] ?? q.defaultFontFamily}
-                        fill={textColors[q.id] ?? q.defaultColor}
-                        draggable
-                        onClick={() => setSelectedId(q.id)}
-                        onTap={() => setSelectedId(q.id)}
-                      />
-                    ))}
+                    {textQuestions
+                      .filter((q) => {
+                        const pa = (q as any).printArea;
+                        return !pa || pa.visibleViews.includes(currentView + 1);
+                      })
+                      .map((q) => {
+                        const pa = (q as any).printArea;
+                        return (
+                          <KonvaText
+                            key={q.id}
+                            ref={(node: any) => { if (node) nodeRefs[q.id] = node; }}
+                            text={textValues[q.id] ?? q.defaultText}
+                            x={(pa?.x ?? q.position.x) * COORD_SCALE}
+                            y={(pa?.y ?? q.position.y) * COORD_SCALE}
+                            rotation={pa?.rotation ?? (q as any).rotation ?? 0}
+                            width={pa ? pa.width * COORD_SCALE : undefined}
+                            fontSize={(textSizes[q.id] ?? q.defaultFontSize) * COORD_SCALE}
+                            fontFamily={textFonts[q.id] ?? q.defaultFontFamily}
+                            fill={textColors[q.id] ?? q.defaultColor}
+                            wrap="word"
+                            draggable
+                            onClick={() => setSelectedId(q.id)}
+                            onTap={() => setSelectedId(q.id)}
+                          />
+                        );
+                      })}
 
                     {fileQuestions.map((q) => {
                       const img = uploadedImages[q.id];
