@@ -57,6 +57,32 @@ export interface ColorSwatch {
 
 export type Condition = { questionId: string; value: string };
 
+export type LogicOperator = "is" | "is_not" | "matches" | "doesnt_match";
+export type LogicEffect =
+  | "should_be"
+  | "should_not_be"
+  | "should_be_unavailable"
+  | "should_be_one_of"
+  | "should_not_be_one_of";
+
+export interface LogicCondition {
+  questionId: string;
+  operator: LogicOperator;
+  value: string;
+}
+
+export interface LogicAction {
+  questionId: string;
+  effect: LogicEffect;
+  value?: string;
+}
+
+export interface LogicRule {
+  id: string;
+  conditions: LogicCondition[];
+  actions: LogicAction[];
+}
+
 export interface ConfiguratorStyle {
   swatchShape: "circle" | "rounded" | "square";
   swatchSize: "sm" | "md" | "lg";
@@ -151,6 +177,9 @@ export interface TextQuestion {
   position: { x: number; y: number };
   rotation?: number;
   printAreaId?: string;
+  printArea?: PrintArea;
+  allowedTransforms?: { move: boolean; resize: boolean; rotate: boolean };
+  maxChars?: number;
   conditions?: Condition[];
 }
 
@@ -172,6 +201,7 @@ export interface PrintArea {
   visibleViews: number[];
   x: number;
   y: number;
+  rotation?: number;
 }
 
 export interface LogoAnswer {
@@ -287,6 +317,62 @@ export type Question =
 
 export type InputType = Question["type"];
 
+export function getQuestionAnswers(q: Question): { value: string; label: string }[] {
+  switch (q.type) {
+    case "color":
+    case "thumbnail":
+      return q.swatches.map((s) => ({ value: s.value, label: s.label }));
+    case "radio":
+      return q.options;
+    case "dropdown":
+      return q.options.map((o) => ({ value: o.value, label: o.label }));
+    case "checkbox":
+      return [
+        { value: "true", label: q.checkedLabel || "Yes" },
+        { value: "false", label: q.uncheckedLabel || "No" },
+      ];
+    case "label":
+      return (q.answers ?? []).map((a) => ({ value: a.value, label: a.label }));
+    default:
+      return [];
+  }
+}
+
+export function evaluateLogicRules(
+  rules: LogicRule[],
+  selectedAnswers: Record<string, string>,
+): { hiddenQuestions: Set<string>; unavailableAnswers: Map<string, Set<string>> } {
+  const hiddenQuestions = new Set<string>();
+  const unavailableAnswers = new Map<string, Set<string>>();
+
+  for (const rule of rules) {
+    const conditionsMet = rule.conditions.every((cond) => {
+      const val = selectedAnswers[cond.questionId] ?? "";
+      if (cond.operator === "is") return val === cond.value;
+      if (cond.operator === "is_not") return val !== cond.value;
+      if (cond.operator === "matches") return val.toLowerCase().includes(cond.value.toLowerCase());
+      if (cond.operator === "doesnt_match") return !val.toLowerCase().includes(cond.value.toLowerCase());
+      return false;
+    });
+
+    if (!conditionsMet) continue;
+
+    for (const action of rule.actions) {
+      if (action.effect === "should_be_unavailable") {
+        hiddenQuestions.add(action.questionId);
+      } else if (
+        (action.effect === "should_not_be" || action.effect === "should_not_be_one_of") &&
+        action.value
+      ) {
+        if (!unavailableAnswers.has(action.questionId)) unavailableAnswers.set(action.questionId, new Set());
+        unavailableAnswers.get(action.questionId)!.add(action.value);
+      }
+    }
+  }
+
+  return { hiddenQuestions, unavailableAnswers };
+}
+
 const ALL_DISPLAY_TYPES = ["none", "image", "color", "logo", "text", "font", "font-size", "text-color", "text-outline"] as const;
 const VISUAL_DISPLAY_TYPES = ["image", "color", "logo", "text", "font", "font-size", "text-color", "text-outline"] as const;
 
@@ -333,6 +419,7 @@ export interface ConfigOptions {
   productImageUrl?: string;
   productHandle?: string;
   numViews?: number;
+  logicRules?: LogicRule[];
 }
 
 export const DEFAULT_LAYERS: LayerConfig[] = [
@@ -374,7 +461,7 @@ export const DEFAULT_QUESTIONS: Question[] = [
     type: "text",
     defaultText: "Your Name",
     defaultColor: "#ffffff",
-    defaultFontSize: 48,
+    defaultFontSize: 38,
     defaultFontFamily: "Arial",
     position: { x: 240, y: 180 },
   },
@@ -413,7 +500,7 @@ export function migrateOptions(options: any, layers: LayerConfig[]): Question[] 
       type: "text",
       defaultText: options.textOption.defaultText || "Your Name",
       defaultColor: options.textOption.defaultColor || "#ffffff",
-      defaultFontSize: options.textOption.defaultFontSize || 48,
+      defaultFontSize: options.textOption.defaultFontSize || 38,
       defaultFontFamily: "Arial",
       position: options.textOption.position || { x: 240, y: 180 },
     });

@@ -8,55 +8,44 @@ datasource db {
 }
 
 model Store {
-  id              String   @id @default(cuid())
-  shop            String   @unique
-  accessToken     String
-  createdAt       DateTime @default(now())
-
-  products        Product[]
-  configurators   Configurator[]
+  id            String         @id @default(cuid())
+  shop          String         @unique
+  accessToken   String
+  createdAt     DateTime       @default(now())
+  configurators Configurator[]
+  products      Product[]
 }
 
 model Product {
-  id                  String   @id @default(cuid())
-  storeId             String
-
-  shopifyProductId    String
-  title               String
-  handle              String?
-
-  createdAt           DateTime @default(now())
-
-  store Store @relation(fields: [storeId], references: [id])
+  id               String   @id @default(cuid())
+  storeId          String
+  shopifyProductId String
+  title            String
+  handle           String?
+  createdAt        DateTime @default(now())
+  store            Store    @relation(fields: [storeId], references: [id])
 }
 
 model Configurator {
-  id              String   @id @default(cuid())
-
-  storeId         String
-  productId       String
-  shop        String
-
-  name        String
-
-  texts       Json
-  images      Json
-
-  settingsJson    Json
-
-  active          Boolean  @default(true)
-
-  createdAt       DateTime @default(now())
-
-  store Store @relation(fields: [storeId], references: [id])
+  id           String   @id @default(cuid())
+  storeId      String
+  productId    String
+  name         String
+  settingsJson Json
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  images       Json
+  shop         String
+  texts        Json
+  store        Store    @relation(fields: [storeId], references: [id])
 }
 
 model CustomProduct {
-  id          String   @id @default(cuid())
-  productId   String   @unique
-  name        String
-  enabled     Boolean  @default(true)
-  createdAt   DateTime @default(now())
+  id        String   @id @default(cuid())
+  productId String   @unique
+  name      String
+  enabled   Boolean  @default(true)
+  createdAt DateTime @default(now())
 }
 
 model ProductConfig {
@@ -79,21 +68,21 @@ model AppSettings {
 }
 
 model Session {
-  id            String    @id
-  shop          String
-  state         String
-  isOnline      Boolean   @default(false)
-  scope         String?
-  expires       DateTime?
-  accessToken   String
+  id                  String    @id
+  shop                String
+  state               String
+  isOnline            Boolean   @default(false)
+  scope               String?
+  expires             DateTime?
+  accessToken         String
+  userId              BigInt?
+  firstName           String?
+  lastName            String?
+  email               String?
+  accountOwner        Boolean   @default(false)
+  locale              String?
+  collaborator        Boolean?  @default(false)
+  emailVerified       Boolean?  @default(false)
   refreshToken        String?
   refreshTokenExpires DateTime?
-  userId        BigInt?
-  firstName     String?
-  lastName      String?
-  email         String?
-  accountOwner  Boolean   @default(false)
-  locale        String?
-  collaborator  Boolean?  @default(false)
-  emailVerified Boolean?  @default(false)
 }

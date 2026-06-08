@@ -2,7 +2,6 @@ import { useLoaderData, Link } from "react-router";
 import { useState, useRef, useEffect } from "react";
 import { Stage, Layer as KonvaLayer, Text as KonvaText, Image as KonvaImage, Transformer } from "react-konva";
 import ProductLayer from "../components/ProductLayer";
-import { ColorPickerPopup } from "../components/ModernColorPicker";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import {
@@ -11,8 +10,10 @@ import {
   type ColorQuestion,
   type ThumbnailQuestion,
   type DropdownQuestion,
+  type LogicRule,
   getLayerSrc,
   migrateOptions,
+  evaluateLogicRules,
 } from "../types/configurator";
 
 const CANVAS_SIZE = 800;
@@ -45,7 +46,8 @@ export async function loader({ request, params }: any) {
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-function isVisible(q: Question, selectedAnswers: Record<string, string>): boolean {
+function isVisible(q: Question, selectedAnswers: Record<string, string>, hiddenQuestions?: Set<string>): boolean {
+  if (hiddenQuestions?.has(q.id)) return false;
   if (!q.conditions?.length) return true;
   return q.conditions.every((c) => selectedAnswers[c.questionId] === c.value);
 }
@@ -137,6 +139,7 @@ export default function ConfiguratorPage() {
 
   const layers: LayerConfig[] = (config?.layers as LayerConfig[]) ?? [];
   const questions: Question[] = migrateOptions(config?.options, layers);
+  const logicRules: LogicRule[] = (config?.options as any)?.logicRules ?? [];
   const numViews: number = (config?.options as any)?.numViews ?? 1;
 
   const [currentView, setCurrentView] = useState(0);
@@ -186,13 +189,7 @@ export default function ConfiguratorPage() {
     return init;
   });
 
-  const [textColors, setTextColors] = useState<Record<string, string>>(() => {
-    const init: Record<string, string> = {};
-    for (const q of questions) {
-      if (q.type === "text") init[q.id] = q.defaultColor;
-    }
-    return init;
-  });
+  const [textColors, setTextColors] = useState<Record<string, string>>({});
 
   const [textSizes, setTextSizes] = useState<Record<string, number>>(() => {
     const init: Record<string, number> = {};
@@ -243,8 +240,8 @@ export default function ConfiguratorPage() {
 
   const handleSwatchClick = (q: ColorQuestion | ThumbnailQuestion, swatchValue: string, imageUrl?: string) => {
     setSelectedAnswers((p) => ({ ...p, [q.id]: swatchValue }));
-    const layerIds = getEffectiveLayerIds(q);
-    if (!layerIds.length) return;
+    const allIds = getEffectiveLayerIds(q);
+    if (!allIds.length) return;
 
     const dt = (q as any).displayType ?? "color";
     if (dt === "image") {
@@ -252,10 +249,21 @@ export default function ConfiguratorPage() {
       const views = swatch?.viewImages ?? [];
       setLayerImageOverrides((p) => {
         const next = { ...p };
-        for (const lid of layerIds) next[lid] = views.map((v) => v || "");
+        for (const lid of allIds) next[lid] = views.map((v) => v || "");
         return next;
       });
     } else {
+      const textIds = allIds.filter((id) => questions.some((tq) => tq.id === id && tq.type === "text"));
+      const layerIds = allIds.filter((id) => !textIds.includes(id));
+
+      if (textIds.length > 0) {
+        setTextColors((p) => {
+          const next = { ...p };
+          for (const tid of textIds) next[tid] = swatchValue;
+          return next;
+        });
+      }
+
       setLayerColors((p) => {
         const next = { ...p };
         for (const lid of layerIds) next[lid] = swatchValue;
@@ -300,11 +308,14 @@ export default function ConfiguratorPage() {
     );
   }
 
+  // Evaluate logic rules to determine which questions are hidden
+  const { hiddenQuestions } = evaluateLogicRules(logicRules, selectedAnswers);
+
   // Canvas-only question lists (used for Konva rendering below)
-  const textQuestions = questions.filter((q): q is Question & { type: "text" } => q.type === "text" && isVisible(q, selectedAnswers));
-  const fileQuestions = questions.filter((q): q is Question & { type: "file" } => q.type === "file" && isVisible(q, selectedAnswers));
+  const textQuestions = questions.filter((q): q is Question & { type: "text" } => q.type === "text" && isVisible(q, selectedAnswers, hiddenQuestions));
+  const fileQuestions = questions.filter((q): q is Question & { type: "file" } => q.type === "file" && isVisible(q, selectedAnswers, hiddenQuestions));
   const visibleQuestions = questions.filter((q) => {
-    if (!isVisible(q, selectedAnswers)) return false;
+    if (!isVisible(q, selectedAnswers, hiddenQuestions)) return false;
     if ((q.type === "radio" || q.type === "dropdown") && !(q as any).options?.length) return false;
     if ((q.type === "color" || q.type === "thumbnail") && !(q as any).swatches?.length) return false;
     return true;
@@ -523,23 +534,29 @@ export default function ConfiguratorPage() {
             }
 
             if (q.type === "text") {
+              const maxChars = (q as any).maxChars ?? 15;
+              const currentLen = (textValues[q.id] ?? q.defaultText ?? "").length;
+              const atLimit = currentLen >= maxChars;
+              const pa = (q as any).printArea;
               return (
                 <div key={q.id} style={{ marginTop: 22 }}>
                   <div style={qLabel}>{q.name}</div>
-                  <input
-                    value={textValues[q.id] ?? q.defaultText}
-                    onChange={(e) => setTextValues((p) => ({ ...p, [q.id]: e.target.value }))}
-                    style={{ width: "100%", padding: "10px 12px", border: "1px solid #e5e7eb", borderRadius: 8, fontSize: 14, boxSizing: "border-box" }}
-                  />
-                  <div style={{ display: "flex", gap: 10, marginTop: 10, alignItems: "flex-end" }}>
-                    <div>
-                      <label style={{ fontSize: 11, color: "#9ca3af", display: "block", marginBottom: 3 }}>Colour</label>
-                      <ColorPickerPopup value={textColors[q.id] ?? q.defaultColor} onChange={(hex) => setTextColors((p) => ({ ...p, [q.id]: hex }))} />
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      <label style={{ fontSize: 11, color: "#9ca3af", display: "block", marginBottom: 3 }}>Size: {textSizes[q.id] ?? q.defaultFontSize}px</label>
-                      <input type="range" min={14} max={120} value={textSizes[q.id] ?? q.defaultFontSize} onChange={(e) => setTextSizes((p) => ({ ...p, [q.id]: Number(e.target.value) }))} style={{ width: "100%" }} />
-                    </div>
+                  <div style={{ position: "relative" }}>
+                    <textarea
+                      value={textValues[q.id] ?? q.defaultText}
+                      onChange={(e) => setTextValues((p) => ({ ...p, [q.id]: e.target.value }))}
+                      placeholder={q.defaultText || "Enter text…"}
+                      maxLength={maxChars}
+                      rows={3}
+                      style={{ width: "100%", padding: "10px 12px", border: "1px solid #e5e7eb", borderRadius: 8, fontSize: 14, boxSizing: "border-box", resize: "vertical", fontFamily: "inherit", lineHeight: 1.5, outline: "none" }}
+                      onFocus={() => {
+                        if (pa?.visibleViews?.length > 0)
+                          setCurrentView(Math.min(pa.visibleViews[0] - 1, numViews - 1));
+                      }}
+                    />
+                    <span style={{ position: "absolute", bottom: 6, right: 8, fontSize: 11, color: atLimit ? "#ef4444" : "#9ca3af", fontWeight: atLimit ? 600 : 400, pointerEvents: "none" }}>
+                      {currentLen}/{maxChars}
+                    </span>
                   </div>
                   <select value={textFonts[q.id] ?? q.defaultFontFamily} onChange={(e) => setTextFonts((p) => ({ ...p, [q.id]: e.target.value }))} style={{ width: "100%", marginTop: 8, padding: "7px 10px", border: "1px solid #e5e7eb", borderRadius: 6, fontSize: 13 }}>
                     {["Arial", "Georgia", "Impact", "Verdana", "Courier New", "Times New Roman"].map((f) => (
@@ -604,7 +621,8 @@ export default function ConfiguratorPage() {
               let src: string;
               if (overrideImages) {
                 const slot = overrideImages[currentView];
-                src = (slot != null && slot !== "") ? slot : (overrideImages.find((s) => s !== "" && s != null) ?? getLayerSrc(layer, currentView));
+                const baseSrc = getLayerSrc(layer, currentView);
+                src = (slot != null && slot !== "") ? slot : (baseSrc || overrideImages.find((s) => s !== "" && s != null) || "");
               } else {
                 src = getLayerSrc(layer, currentView);
               }
@@ -620,21 +638,32 @@ export default function ConfiguratorPage() {
               );
             })}
 
-            {textQuestions.map((q) => (
-              <KonvaText
-                key={q.id}
-                ref={(node) => { if (node) nodeRefs[q.id] = node; }}
-                text={textValues[q.id] ?? q.defaultText}
-                x={q.position.x * COORD_SCALE}
-                y={q.position.y * COORD_SCALE}
-                fontSize={(textSizes[q.id] ?? q.defaultFontSize) * COORD_SCALE}
-                fontFamily={textFonts[q.id] ?? q.defaultFontFamily}
-                fill={textColors[q.id] ?? q.defaultColor}
-                draggable
-                onClick={() => setSelectedId(q.id)}
-                onTap={() => setSelectedId(q.id)}
-              />
-            ))}
+            {textQuestions
+              .filter((q) => {
+                const pa = (q as any).printArea;
+                return !pa || pa.visibleViews.includes(currentView + 1);
+              })
+              .map((q) => {
+                const pa = (q as any).printArea;
+                return (
+                  <KonvaText
+                    key={q.id}
+                    ref={(node) => { if (node) nodeRefs[q.id] = node; }}
+                    text={textValues[q.id] ?? q.defaultText}
+                    x={(pa?.x ?? q.position.x) * COORD_SCALE}
+                    y={(pa?.y ?? q.position.y) * COORD_SCALE}
+                    rotation={pa?.rotation ?? (q as any).rotation ?? 0}
+                    width={pa ? pa.width * COORD_SCALE : undefined}
+                    fontSize={(textSizes[q.id] ?? q.defaultFontSize) * COORD_SCALE}
+                    fontFamily={textFonts[q.id] ?? q.defaultFontFamily}
+                    fill={textColors[q.id] ?? q.defaultColor}
+                    wrap="word"
+                    draggable
+                    onClick={() => setSelectedId(q.id)}
+                    onTap={() => setSelectedId(q.id)}
+                  />
+                );
+              })}
 
             {fileQuestions.map((q) => {
               const img = uploadedImages[q.id];

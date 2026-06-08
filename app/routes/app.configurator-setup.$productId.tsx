@@ -23,8 +23,14 @@ import {
   type FileQuestion,
   type LogoAnswer,
   type PrintArea,
+  type LogicRule,
+  type LogicCondition,
+  type LogicAction,
+  type LogicOperator,
+  type LogicEffect,
   getLayerSrc,
   migrateOptions,
+  getQuestionAnswers,
   DISPLAY_TYPE_MAP,
   DISPLAY_TYPE_META,
   INPUT_TYPE_LABELS,
@@ -63,6 +69,7 @@ export async function action({ request, params }: any) {
 
   const layers = JSON.parse(formData.get("layers") as string);
   const questions = JSON.parse(formData.get("questions") as string);
+  const logicRules = JSON.parse(formData.get("logicRules") as string ?? "[]");
   const productName = formData.get("productName") as string;
   const productImageUrl = formData.get("productImageUrl") as string;
   const productHandle = formData.get("productHandle") as string;
@@ -76,8 +83,8 @@ export async function action({ request, params }: any) {
 
   await prisma.productConfig.upsert({
     where: { productId: decodedId },
-    create: { productId: decodedId, productName, shop, layers, options: { questions, productImageUrl, productHandle, numViews, canvasW, canvasH } },
-    update: { productName, shop, layers, options: { questions, productImageUrl, productHandle, numViews, canvasW, canvasH } },
+    create: { productId: decodedId, productName, shop, layers, options: { questions, logicRules, productImageUrl, productHandle, numViews, canvasW, canvasH } },
+    update: { productName, shop, layers, options: { questions, logicRules, productImageUrl, productHandle, numViews, canvasW, canvasH } },
   });
 
   await admin.graphql(
@@ -852,16 +859,9 @@ function ThumbnailEditor({ q, layers, questions, numViews, onChange, onEditAnswe
   const handleAnswerDragEnd = () => { setDragAnswerIdx(null); setDragOverAnswerIdx(null); };
 
   const linkedIds = q.applyOn ?? [];
-  const imageQs = questions.filter((oq) =>
-    oq.id !== q.id && (
-      (oq.type === "thumbnail" && ((oq as ThumbnailQuestion).displayType ?? "image") === "image") ||
-      (oq.type === "dropdown" && (oq as DropdownQuestion).displayType === "image")
-    )
-  );
-  const imageLayers = layers.filter((l) => l.displayType === "image");
   const allImageItems = [
-    ...imageQs.map((oq) => ({ id: oq.id, name: oq.name })),
-    ...imageLayers.map((l) => ({ id: l.id, name: l.name })),
+    ...questions.filter((oq) => oq.id !== q.id).map((oq) => ({ id: oq.id, name: oq.name })),
+    ...layers.map((l) => ({ id: l.id, name: l.name })),
   ];
 
   return (
@@ -1172,20 +1172,20 @@ const TEXT_CREATE_OPTIONS = [
   { key: "outline",   label: "Outline question",    icon: "Ā", bg: "#f59e0b" },
 ] as const;
 
-function TextEditor({ q, layers, onChange, onSwitchType, onCreateSubQuestion }: {
+function TextEditor({ q, layers, onChange, onSwitchType, onCreateSubQuestion, onEditPrintArea }: {
   q: TextQuestion;
   layers: LayerConfig[];
   onChange: (updated: Question) => void;
   onSwitchType?: (type: InputType) => void;
   onCreateSubQuestion?: (subType: string, parentId: string) => void;
+  onEditPrintArea?: () => void;
 }) {
   const [showInputTypePicker, setShowInputTypePicker] = useState(false);
   const [showDisplayTypePicker, setShowDisplayTypePicker] = useState(false);
-  const [showPrintAreaPicker, setShowPrintAreaPicker] = useState(false);
 
   const displayType = q.displayType ?? "text";
   const displayMeta = DISPLAY_TYPE_META[displayType] ?? { label: "Text", icon: "T" };
-  const printArea = layers.find((l) => l.id === q.printAreaId);
+  const printArea = q.printArea;
 
   return (
     <div>
@@ -1281,36 +1281,85 @@ function TextEditor({ q, layers, onChange, onSwitchType, onCreateSubQuestion }: 
           <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: printArea ? 8 : 0 }}>
             <span style={{ fontSize: 13, color: "#9ca3af" }}>↳</span>
             <span style={{ fontSize: 12, color: "#6b7280", fontWeight: 500 }}>Apply on</span>
-            <div style={{ marginLeft: "auto", position: "relative" }} onMouseLeave={() => setShowPrintAreaPicker(false)}>
+            {!printArea && (
               <button
-                onClick={() => setShowPrintAreaPicker((v) => !v)}
-                style={{ display: "flex", alignItems: "center", gap: 5, padding: "4px 10px", border: "1px solid #e5e7eb", borderRadius: 6, cursor: "pointer", fontSize: 12, background: "#f9fafb", color: "#374151" }}
+                onClick={() => {
+                  const id = `pa-${Date.now()}`;
+                  const newPA: PrintArea = {
+                    id, name: `Print area 1`,
+                    customerEditingView: 1, dpi: 300, units: "px",
+                    width: 200, height: 80, bleedArea: 0,
+                    showQualityIndicator: false, safeAreaWidth: 0, safeAreaHeight: 0,
+                    outlineColor: "#3b82f6", showOutline: true,
+                    visibleViews: [1], x: q.position.x, y: q.position.y,
+                  };
+                  onChange({ ...q, printArea: newPA });
+                  onEditPrintArea?.();
+                }}
+                style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 5, padding: "4px 10px", border: "1px solid #e5e7eb", borderRadius: 6, cursor: "pointer", fontSize: 12, background: "#f9fafb", color: "#374151" }}
               >
                 <span>🖨</span><span>Print area</span><span style={{ fontWeight: 700 }}>+</span>
               </button>
-              {showPrintAreaPicker && (
-                <div style={{ position: "absolute", right: 0, top: "calc(100% + 4px)", zIndex: 50, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 8, boxShadow: "0 4px 16px rgba(0,0,0,0.12)", minWidth: 180, overflow: "hidden" }}>
-                  {layers.filter((l) => l.id !== q.printAreaId).map((l) => (
-                    <button key={l.id} onClick={() => { onChange({ ...q, printAreaId: l.id }); setShowPrintAreaPicker(false); }}
-                      style={{ display: "block", width: "100%", textAlign: "left", padding: "8px 14px", border: "none", background: "none", cursor: "pointer", fontSize: 13, color: "#374151" }}>
-                      {l.name}
-                    </button>
-                  ))}
-                  {layers.length === 0 && (
-                    <p style={{ padding: "8px 14px", fontSize: 12, color: "#9ca3af", margin: 0 }}>No layers available.</p>
-                  )}
-                </div>
-              )}
-            </div>
+            )}
           </div>
           {printArea && (
             <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 10px", background: "#f9fafb", borderRadius: 6, border: "1px solid #e5e7eb" }}>
               <span style={{ fontSize: 13 }}>🖨</span>
-              <span style={{ flex: 1, fontSize: 12, fontWeight: 500 }}>{printArea.name}</span>
-              <button onClick={() => onChange({ ...q, printAreaId: undefined })}
+              <span onClick={() => onEditPrintArea?.()} style={{ flex: 1, fontSize: 12, fontWeight: 500, cursor: "pointer" }}>{printArea.name}</span>
+              <button onClick={() => onChange({ ...q, printArea: undefined })}
                 style={{ background: "none", border: "none", color: "#9ca3af", cursor: "pointer", fontSize: 16, padding: 0, lineHeight: 1 }}>×</button>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Text settings — font, color, size, rotation (shown before transforms so Rotation ° is always visible) */}
+      <div style={{ padding: "12px 16px", borderBottom: "1px solid #f3f4f6" }}>
+        <span style={{ fontSize: 11, fontWeight: 700, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.05em", display: "block", marginBottom: 10 }}>Text settings</span>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
+          <div>
+            <label style={labelSt}>Font size</label>
+            <input type="number" value={q.defaultFontSize} onChange={(e) => onChange({ ...q, defaultFontSize: Number(e.target.value) })} style={inputSt} />
+          </div>
+          <div>
+            <label style={labelSt}>Rotation °</label>
+            <input type="number" value={q.rotation ?? 0} onChange={(e) => onChange({ ...q, rotation: Number(e.target.value) })} style={inputSt} />
+          </div>
+        </div>
+        <label style={labelSt}>Font family</label>
+        <select value={q.defaultFontFamily} onChange={(e) => onChange({ ...q, defaultFontFamily: e.target.value })} style={{ ...inputSt, marginBottom: 8 }}>
+          {["Arial", "Georgia", "Impact", "Verdana", "Courier New", "Times New Roman"].map((f) => (
+            <option key={f} value={f}>{f}</option>
+          ))}
+        </select>
+        <label style={labelSt}>Color</label>
+        <div style={{ marginBottom: 8 }}>
+          <ModernColorPicker value={q.defaultColor || "#000000"} onChange={(hex) => onChange({ ...q, defaultColor: hex })} />
+        </div>
+      </div>
+
+      {/* Allowed transforms — shown when print area is set */}
+      {displayType === "text" && printArea && (
+        <div style={{ padding: "12px 16px", borderBottom: "1px solid #f3f4f6" }}>
+          <span style={{ fontSize: 12, color: "#6b7280", fontWeight: 600, display: "block", marginBottom: 8 }}>Select allowed transforms</span>
+          {(["move", "resize", "rotate"] as const).map((key) => {
+            const icons: Record<string, string> = { move: "✥", resize: "↔", rotate: "↻" };
+            const labels: Record<string, string> = { move: "Move", resize: "Resize", rotate: "Rotate" };
+            const transforms = q.allowedTransforms ?? { move: false, resize: false, rotate: false };
+            const isOn = transforms[key];
+            return (
+              <div key={key} style={{ display: "flex", alignItems: "center", padding: "6px 0", borderBottom: "1px solid #f9fafb" }}>
+                <span style={{ fontSize: 14, marginRight: 8, color: "#9ca3af" }}>{icons[key]}</span>
+                <span style={{ flex: 1, fontSize: 13, color: "#374151" }}>{labels[key]}</span>
+                <button
+                  onClick={() => onChange({ ...q, allowedTransforms: { ...(q.allowedTransforms ?? { move: false, resize: false, rotate: false }), [key]: !isOn } })}
+                  style={{ width: 36, height: 20, borderRadius: 10, background: isOn ? "#111827" : "#d1d5db", border: "none", cursor: "pointer", position: "relative", flexShrink: 0 }}
+                >
+                  <span style={{ position: "absolute", top: 2, left: isOn ? 18 : 2, width: 16, height: 16, borderRadius: 8, background: "#fff", transition: "left 0.12s" }} />
+                </button>
+              </div>
+            );
+          })}
         </div>
       )}
 
@@ -1334,30 +1383,9 @@ function TextEditor({ q, layers, onChange, onSwitchType, onCreateSubQuestion }: 
         </div>
       )}
 
-      {/* Advanced settings: font, color, size, rotation */}
+      {/* Position + max chars */}
       <div style={{ padding: "12px 16px" }}>
-        <span style={{ fontSize: 11, fontWeight: 700, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.05em", display: "block", marginBottom: 10 }}>Text settings</span>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, marginBottom: 8 }}>
-          <div>
-            <label style={labelSt}>Font size</label>
-            <input type="number" value={q.defaultFontSize} onChange={(e) => onChange({ ...q, defaultFontSize: Number(e.target.value) })} style={inputSt} />
-          </div>
-          <div>
-            <label style={labelSt}>Rotation °</label>
-            <input type="number" value={q.rotation ?? 0} onChange={(e) => onChange({ ...q, rotation: Number(e.target.value) })} style={inputSt} />
-          </div>
-        </div>
-        <label style={labelSt}>Font family</label>
-        <select value={q.defaultFontFamily} onChange={(e) => onChange({ ...q, defaultFontFamily: e.target.value })} style={{ ...inputSt, marginBottom: 8 }}>
-          {["Arial", "Georgia", "Impact", "Verdana", "Courier New", "Times New Roman"].map((f) => (
-            <option key={f} value={f}>{f}</option>
-          ))}
-        </select>
-        <label style={labelSt}>Color</label>
-        <div style={{ marginBottom: 8 }}>
-          <ModernColorPicker value={q.defaultColor || "#000000"} onChange={(hex) => onChange({ ...q, defaultColor: hex })} />
-        </div>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
           <div>
             <label style={labelSt}>Position X</label>
             <input type="number" value={q.position.x} onChange={(e) => onChange({ ...q, position: { ...q.position, x: Number(e.target.value) } })} style={inputSt} />
@@ -1367,6 +1395,15 @@ function TextEditor({ q, layers, onChange, onSwitchType, onCreateSubQuestion }: 
             <input type="number" value={q.position.y} onChange={(e) => onChange({ ...q, position: { ...q.position, y: Number(e.target.value) } })} style={inputSt} />
           </div>
         </div>
+        <label style={labelSt}>Max characters</label>
+        <input
+          type="number"
+          min={1}
+          max={500}
+          value={q.maxChars ?? 15}
+          onChange={(e) => onChange({ ...q, maxChars: Math.max(1, Number(e.target.value)) })}
+          style={inputSt}
+        />
       </div>
     </div>
   );
@@ -1674,13 +1711,14 @@ function FileEditor({ q, onChange, onSwitchType, onEditPrintArea }: {
 
 const UNITS_LABELS = { in: "In", cm: "cm", px: "px" };
 
-function PrintAreaPanel({ area, numViews, layers, onClose, onDelete, onChange }: {
+function PrintAreaPanel({ area, numViews, layers, onClose, onDelete, onChange, onViewChange }: {
   area: PrintArea;
   numViews: number;
   layers: LayerConfig[];
   onClose: () => void;
   onDelete: () => void;
   onChange: (updated: PrintArea) => void;
+  onViewChange?: (view: number) => void;
 }) {
   const [showClipPicker, setShowClipPicker] = useState(false);
 
@@ -1710,7 +1748,11 @@ function PrintAreaPanel({ area, numViews, layers, onClose, onDelete, onChange }:
         {/* Customer editing view */}
         <div style={{ padding: "4px 16px 10px", borderBottom: "1px solid #f3f4f6" }}>
           <label style={labelSt}>Customer editing view</label>
-          <select value={area.customerEditingView} onChange={(e) => onChange({ ...area, customerEditingView: Number(e.target.value) })} style={inputSt}>
+          <select value={area.customerEditingView} onChange={(e) => {
+            const v = Number(e.target.value);
+            onChange({ ...area, customerEditingView: v });
+            onViewChange?.(v);
+          }} style={inputSt}>
             {Array.from({ length: numViews }).map((_, i) => (
               <option key={i + 1} value={i + 1}>{i + 1}</option>
             ))}
@@ -1752,6 +1794,11 @@ function PrintAreaPanel({ area, numViews, layers, onClose, onDelete, onChange }:
               <input type="number" value={area.height} min={0.1}
                 onChange={(e) => onChange({ ...area, height: Number(e.target.value) })} style={inputSt} />
             </div>
+          </div>
+          <div style={{ marginBottom: 8 }}>
+            <label style={labelSt}>Rotation °</label>
+            <input type="number" value={area.rotation ?? 0} min={-360} max={360}
+              onChange={(e) => onChange({ ...area, rotation: Number(e.target.value) })} style={inputSt} />
           </div>
           <div>
             <label style={labelSt}>Bleed area</label>
@@ -3050,6 +3097,266 @@ function UniversalInputDisplayRow({ q, onChange, onSwitchType }: {
   );
 }
 
+// ─── Logic Rule Components ────────────────────────────────────────────────────
+
+const selSt: React.CSSProperties = {
+  padding: "5px 8px", border: "1px solid #d1d5db", borderRadius: 6, fontSize: 13,
+  background: "#fff", cursor: "pointer", outline: "none",
+};
+
+function LogicRuleEditor({
+  questions,
+  onSave,
+  onCancel,
+  initialRule,
+}: {
+  questions: Question[];
+  onSave: (rule: LogicRule) => void;
+  onCancel: () => void;
+  initialRule?: LogicRule;
+}) {
+  const firstCond = initialRule?.conditions[0];
+  const firstAction = initialRule?.actions[0];
+
+  const [condQId, setCondQId] = useState(firstCond?.questionId ?? questions[0]?.id ?? "");
+  const [condOp, setCondOp] = useState<LogicOperator>(firstCond?.operator ?? "is");
+  const [condVal, setCondVal] = useState(firstCond?.value ?? "");
+  const [actionQId, setActionQId] = useState(firstAction?.questionId ?? questions[0]?.id ?? "");
+  const [actionEffect, setActionEffect] = useState<LogicEffect>(firstAction?.effect ?? "should_be_unavailable");
+  const [actionVal, setActionVal] = useState(firstAction?.value ?? "");
+  const isEditing = !!initialRule;
+
+  const condQ = questions.find((q) => q.id === condQId);
+  const actionQ = questions.find((q) => q.id === actionQId);
+  const condAnswers = condQ ? getQuestionAnswers(condQ) : [];
+  const actionAnswers = actionQ ? getQuestionAnswers(actionQ) : [];
+
+  const needsActionValue = actionEffect !== "should_be_unavailable";
+  const canSave = condQId && condVal && actionQId && (!needsActionValue || actionVal);
+
+  const handleSave = () => {
+    if (!canSave) return;
+    onSave({
+      id: initialRule?.id ?? `rule-${Date.now()}`,
+      conditions: [{ questionId: condQId, operator: condOp, value: condVal }],
+      actions: [{ questionId: actionQId, effect: actionEffect, value: needsActionValue ? actionVal : undefined }],
+    });
+  };
+
+  return (
+    <div style={{ background: "#fff", border: "1.5px solid #2563eb", borderRadius: 8, padding: "14px 16px", margin: "0 0 12px" }}>
+      {isEditing && <div style={{ fontSize: 11, fontWeight: 700, color: "#2563eb", textTransform: "uppercase", letterSpacing: "0.06em", marginBottom: 10 }}>Edit rule</div>}
+      <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+        <span style={{ fontSize: 13, color: "#6b7280", fontWeight: 600 }}>When</span>
+
+        <select value={condQId} onChange={(e) => { setCondQId(e.target.value); setCondVal(""); }} style={selSt}>
+          {questions.map((q) => <option key={q.id} value={q.id}>{q.name}</option>)}
+        </select>
+
+        <select value={condOp} onChange={(e) => setCondOp(e.target.value as LogicOperator)} style={selSt}>
+          <option value="is">is</option>
+          <option value="is_not">is not</option>
+          <option value="matches">matches</option>
+          <option value="doesnt_match">doesn't match</option>
+        </select>
+
+        <select value={condVal} onChange={(e) => setCondVal(e.target.value)} style={selSt}>
+          <option value="">— Answer —</option>
+          {condAnswers.map((a) => <option key={a.value} value={a.value}>{a.label}</option>)}
+        </select>
+
+        <span style={{ fontSize: 13, color: "#6b7280", fontWeight: 600 }}>then</span>
+
+        <select value={actionQId} onChange={(e) => { setActionQId(e.target.value); setActionVal(""); }} style={selSt}>
+          {questions.map((q) => <option key={q.id} value={q.id}>{q.name}</option>)}
+        </select>
+
+        <select value={actionEffect} onChange={(e) => setActionEffect(e.target.value as LogicEffect)} style={selSt}>
+          <option value="should_be">should be</option>
+          <option value="should_not_be">should not be</option>
+          <option value="should_be_unavailable">should be unavailable</option>
+          <option value="should_be_one_of">should be one of</option>
+          <option value="should_not_be_one_of">should not be one of</option>
+        </select>
+
+        {needsActionValue && (
+          <select value={actionVal} onChange={(e) => setActionVal(e.target.value)} style={selSt}>
+            <option value="">— Answer —</option>
+            {actionAnswers.map((a) => <option key={a.value} value={a.value}>{a.label}</option>)}
+          </select>
+        )}
+      </div>
+
+      <div style={{ display: "flex", gap: 8, marginTop: 14, justifyContent: "flex-end" }}>
+        <button onClick={onCancel} style={{ ...smallBtnSt, background: "none", border: "1px solid #e5e7eb" }}>Cancel</button>
+        <button
+          onClick={handleSave}
+          disabled={!canSave}
+          style={{ background: canSave ? "#2563eb" : "#9ca3af", color: "#fff", border: "none", borderRadius: 6, padding: "6px 18px", cursor: canSave ? "pointer" : "default", fontSize: 13, fontWeight: 600 }}
+        >
+          {isEditing ? "Save" : "Add"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function ruleToText(rule: LogicRule, questions: Question[]): string {
+  const getQName = (id: string) => questions.find((q) => q.id === id)?.name ?? id;
+  const getAnswerLabel = (qId: string, val: string) => {
+    const q = questions.find((q) => q.id === qId);
+    if (!q) return val;
+    const ans = getQuestionAnswers(q);
+    return ans.find((a) => a.value === val)?.label ?? val;
+  };
+  const EFFECT_LABELS: Record<LogicEffect, string> = {
+    should_be: "should be",
+    should_not_be: "should not be",
+    should_be_unavailable: "should be unavailable",
+    should_be_one_of: "should be one of",
+    should_not_be_one_of: "should not be one of",
+  };
+  const OP_LABELS: Record<LogicOperator, string> = {
+    is: "is", is_not: "is not", matches: "matches", doesnt_match: "doesn't match",
+  };
+  const condParts = rule.conditions.map(
+    (c) => `${getQName(c.questionId)} ${OP_LABELS[c.operator]} ${getAnswerLabel(c.questionId, c.value)}`
+  );
+  const actionParts = rule.actions.map(
+    (a) => `${getQName(a.questionId)} ${EFFECT_LABELS[a.effect]}${a.value ? ` ${getAnswerLabel(a.questionId, a.value)}` : ""}`
+  );
+  return `When ${condParts.join(" and ")} then ${actionParts.join(" and ")}`;
+}
+
+const actionIconSt: React.CSSProperties = {
+  background: "none", border: "none", cursor: "pointer", padding: "7px 11px",
+  display: "flex", alignItems: "center", justifyContent: "center", fontSize: 14,
+};
+
+function LogicPanel({
+  rules,
+  questions,
+  onChange,
+  onBack,
+}: {
+  rules: LogicRule[];
+  questions: Question[];
+  onChange: (rules: LogicRule[]) => void;
+  onBack: () => void;
+}) {
+  const [addingNew, setAddingNew] = useState(false);
+  const [editingRuleId, setEditingRuleId] = useState<string | null>(null);
+  const [hoveredRuleId, setHoveredRuleId] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+
+  const filtered = rules.filter((r) =>
+    !search || ruleToText(r, questions).toLowerCase().includes(search.toLowerCase())
+  );
+
+  const handleStartAdd = () => { setAddingNew(true); setEditingRuleId(null); };
+  const handleStartEdit = (id: string) => { setEditingRuleId(id); setAddingNew(false); };
+
+  return (
+    <div style={{ flex: 1, display: "flex", flexDirection: "column", background: "#fff", overflow: "hidden" }}>
+      {/* Header */}
+      <div style={{ height: 44, borderBottom: "1px solid #e5e7eb", display: "flex", alignItems: "center", padding: "0 20px", gap: 12, flexShrink: 0 }}>
+        <button onClick={onBack} style={{ background: "none", border: "none", cursor: "pointer", fontSize: 18, color: "#6b7280", padding: 0, display: "flex", alignItems: "center" }}>←</button>
+        <span style={{ fontWeight: 700, fontSize: 14 }}>Logic</span>
+        <div style={{ marginLeft: "auto" }}>
+          <button
+            onClick={handleStartAdd}
+            style={{ background: "#2563eb", color: "#fff", border: "none", borderRadius: 6, padding: "6px 16px", cursor: "pointer", fontSize: 13, fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}
+          >
+            + Add rule
+          </button>
+        </div>
+      </div>
+
+      {/* Search bar */}
+      <div style={{ padding: "10px 20px", borderBottom: "1px solid #e5e7eb", flexShrink: 0 }}>
+        <input
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search rules..."
+          style={{ width: "100%", padding: "7px 12px", border: "1px solid #e5e7eb", borderRadius: 6, fontSize: 13, boxSizing: "border-box", outline: "none" }}
+        />
+      </div>
+
+      {/* Content */}
+      <div style={{ flex: 1, overflowY: "auto", padding: "16px 20px" }}>
+        {addingNew && (
+          <LogicRuleEditor
+            questions={questions}
+            onSave={(rule) => { onChange([...rules, rule]); setAddingNew(false); }}
+            onCancel={() => setAddingNew(false)}
+          />
+        )}
+
+        {filtered.length === 0 && !addingNew && (
+          <div style={{ textAlign: "center", color: "#9ca3af", padding: "60px 20px" }}>
+            <div style={{ fontSize: 32, marginBottom: 12 }}>⚙</div>
+            <p style={{ margin: 0, fontSize: 13, lineHeight: 1.6 }}>
+              No logic rules yet. Click <strong>+ Add rule</strong> to create your first conditional rule.
+            </p>
+          </div>
+        )}
+
+        {filtered.map((rule) => (
+          <div key={rule.id}>
+            {editingRuleId === rule.id ? (
+              <LogicRuleEditor
+                questions={questions}
+                initialRule={rule}
+                onSave={(updated) => {
+                  onChange(rules.map((r) => r.id === rule.id ? updated : r));
+                  setEditingRuleId(null);
+                }}
+                onCancel={() => setEditingRuleId(null)}
+              />
+            ) : (
+              <div
+                style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 0", borderBottom: "1px solid #f3f4f6", position: "relative" }}
+                onMouseEnter={() => setHoveredRuleId(rule.id)}
+                onMouseLeave={() => setHoveredRuleId(null)}
+              >
+                <span style={{ flex: 1, fontSize: 13, color: "#374151", lineHeight: 1.5, paddingRight: hoveredRuleId === rule.id ? 112 : 0 }}>
+                  {ruleToText(rule, questions)}
+                </span>
+
+                {hoveredRuleId === rule.id && (
+                  <div style={{ position: "absolute", right: 0, display: "flex", alignItems: "center", background: "#fff", border: "1px solid #e5e7eb", borderRadius: 8, boxShadow: "0 2px 10px rgba(0,0,0,0.1)", overflow: "hidden", flexShrink: 0 }}>
+                    <button
+                      onClick={() => onChange([...rules, { ...rule, id: `rule-${Date.now()}` }])}
+                      style={{ ...actionIconSt, color: "#6b7280", borderRight: "1px solid #e5e7eb" }}
+                      title="Duplicate"
+                    >
+                      ⎘
+                    </button>
+                    <button
+                      onClick={() => handleStartEdit(rule.id)}
+                      style={{ ...actionIconSt, color: "#6b7280", borderRight: "1px solid #e5e7eb" }}
+                      title="Edit"
+                    >
+                      ✎
+                    </button>
+                    <button
+                      onClick={() => onChange(rules.filter((r) => r.id !== rule.id))}
+                      style={{ ...actionIconSt, color: "#ef4444" }}
+                      title="Delete"
+                    >
+                      🗑
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ─── Main builder page ────────────────────────────────────────────────────────
 
 export default function BuilderPage() {
@@ -3068,6 +3375,8 @@ export default function BuilderPage() {
   const [questions, setQuestions] = useState<Question[]>(
     () => migrateOptions(existingOptions, (config?.layers as LayerConfig[]) ?? []) || [],
   );
+  const [logicRules, setLogicRules] = useState<LogicRule[]>((existingOptions?.logicRules as LogicRule[]) ?? []);
+  const [showLogicPanel, setShowLogicPanel] = useState(false);
 
   type Sel = { kind: "question" | "layer"; id: string } | null;
   const [selected, setSelected] = useState<Sel>(null);
@@ -3116,7 +3425,7 @@ export default function BuilderPage() {
     if (!dragQId || dragQId === targetId) { setDragQId(null); setDragOverQId(null); return; }
     const targetQ = questions.find((q) => q.id === targetId);
     if (targetQ?.type === "group") {
-      // Drop INTO group
+      // Drop ON group header → add to end
       setQuestions((prev) => prev.map((q) => {
         if (q.type !== "group") return q;
         if (q.id === targetId) {
@@ -3127,17 +3436,34 @@ export default function BuilderPage() {
       }));
       setExpandedGroups((prev) => new Set([...prev, targetId]));
     } else {
-      // Reorder + remove from any group (makes top-level)
-      const dragIdx = questions.findIndex((q) => q.id === dragQId);
-      const targetIdx = questions.findIndex((q) => q.id === targetId);
-      if (dragIdx === -1 || targetIdx === -1) { setDragQId(null); setDragOverQId(null); return; }
-      const next = [...questions];
-      const [removed] = next.splice(dragIdx, 1);
-      const newTarget = next.findIndex((q) => q.id === targetId);
-      next.splice(newTarget + 1, 0, removed);
-      setQuestions(next.map((q) =>
-        q.type === "group" ? { ...q, childIds: (q as GroupQuestion).childIds.filter((id) => id !== dragQId) } : q
-      ));
+      // Check if target is a child inside a group
+      const targetGroup = questions.find(
+        (q): q is GroupQuestion => q.type === "group" && (q as GroupQuestion).childIds.includes(targetId)
+      );
+      if (targetGroup) {
+        // Reorder within that group (or move into it at the target position)
+        const newChildIds = [...targetGroup.childIds];
+        if (newChildIds.includes(dragQId)) newChildIds.splice(newChildIds.indexOf(dragQId), 1);
+        newChildIds.splice(newChildIds.indexOf(targetId), 0, dragQId);
+        setQuestions((prev) => prev.map((q) => {
+          if (q.type !== "group") return q;
+          if (q.id === targetGroup.id) return { ...q, childIds: newChildIds };
+          return { ...q, childIds: (q as GroupQuestion).childIds.filter((id) => id !== dragQId) };
+        }));
+        setExpandedGroups((prev) => new Set([...prev, targetGroup.id]));
+      } else {
+        // Target is top-level → reorder top-level, remove from any group
+        const dragIdx = questions.findIndex((q) => q.id === dragQId);
+        const targetIdx = questions.findIndex((q) => q.id === targetId);
+        if (dragIdx === -1 || targetIdx === -1) { setDragQId(null); setDragOverQId(null); return; }
+        const next = [...questions];
+        const [removed] = next.splice(dragIdx, 1);
+        const newTarget = next.findIndex((q) => q.id === targetId);
+        next.splice(newTarget + 1, 0, removed);
+        setQuestions(next.map((q) =>
+          q.type === "group" ? { ...q, childIds: (q as GroupQuestion).childIds.filter((id) => id !== dragQId) } : q
+        ));
+      }
     }
     setDragQId(null);
     setDragOverQId(null);
@@ -3147,7 +3473,19 @@ export default function BuilderPage() {
   const [showAddLayerModal, setShowAddLayerModal] = useState(false);
 
   useEffect(() => { setMounted(true); }, []);
-  useEffect(() => { setAnswerEditState(null); setEditingPrintAreaId(null); }, [selected?.id]);
+  useEffect(() => {
+    setAnswerEditState(null);
+    setEditingPrintAreaId(null);
+    if (selected?.kind === "question") {
+      const q = questions.find((q) => q.id === selected.id);
+      if (q?.type === "text") {
+        const pa = (q as TextQuestion).printArea;
+        if (pa && pa.visibleViews.length > 0) {
+          setCurrentView(Math.min(pa.visibleViews[0] - 1, numViews - 1));
+        }
+      }
+    }
+  }, [selected?.id]);
 
   // Swatch preview state — starts empty so layers render their natural uploaded PNG.
   // Updated when user clicks a swatch in the right panel for a live color preview.
@@ -3224,14 +3562,20 @@ export default function BuilderPage() {
   // Konva refs for drag/rotate
   const textNodeRefs = useRef<Record<string, any>>({});
   const logoNodeRefs = useRef<Record<string, any>>({});
+  const printAreaGroupRefs = useRef<Record<string, any>>({});
   const transformerRef = useRef<any>(null);
 
   // Attach transformer to the selected text or logo node
   useEffect(() => {
     const selQ = selected?.kind === "question" ? questions.find((q) => q.id === selected.id) : null;
-    const isText = selQ?.type === "text";
+    const isTextWithPA = selQ?.type === "text" && !!(selQ as TextQuestion).printArea;
+    const isTextNoPA = selQ?.type === "text" && !(selQ as TextQuestion).printArea;
     const isLogo = selQ?.type === "file" && (selQ as FileQuestion).displayType === "logo";
-    if (isText && transformerRef.current && textNodeRefs.current[selQ!.id]) {
+    if (isTextWithPA) {
+      // Print area group handles drag — no transformer needed
+      transformerRef.current?.nodes([]);
+      transformerRef.current?.getLayer()?.batchDraw();
+    } else if (isTextNoPA && transformerRef.current && textNodeRefs.current[selQ!.id]) {
       transformerRef.current.nodes([textNodeRefs.current[selQ!.id]]);
       transformerRef.current.getLayer()?.batchDraw();
     } else if (isLogo && transformerRef.current && logoNodeRefs.current[selQ!.id]) {
@@ -3278,7 +3622,7 @@ export default function BuilderPage() {
         q = { id, name: "Untitled image", type: "thumbnail", displayType: displayType as any, swatches: [] };
         break;
       case "text":
-        q = { id, name: "Custom Text", type: "text", displayType: (displayType as "none" | "text") || "text", defaultText: "Your Name", defaultColor: "#ffffff", defaultFontSize: 48, defaultFontFamily: "Arial", position: { x: 200, y: 180 } };
+        q = { id, name: "Custom Text", type: "text", displayType: (displayType as "none" | "text") || "text", defaultText: "Your Name", defaultColor: "#ffffff", defaultFontSize: 38, defaultFontFamily: "Arial", position: { x: 200, y: 180 } };
         break;
       case "file":
         q = { id, name: "Untitled logo", type: "file", displayType: (displayType as "none" | "logo") || "logo", position: { x: 200, y: 280 }, defaultWidth: 120, defaultHeight: 120, printAreas: [], allowedTransforms: { move: true, resize: true, rotate: false } };
@@ -3342,7 +3686,7 @@ export default function BuilderPage() {
       case "dropdown":  newQ = { id, name, type: "dropdown", options: [{ value: "option-1", label: "Option 1" }] }; break;
       case "radio":     newQ = { id, name, type: "radio", options: [{ value: "option-1", label: "Option 1" }] }; break;
       case "checkbox":  newQ = { id, name, type: "checkbox", checkedLabel: "Yes", uncheckedLabel: "No", defaultChecked: false }; break;
-      case "text":      newQ = { id, name, type: "text", defaultText: "Your Name", defaultColor: "#ffffff", defaultFontSize: 48, defaultFontFamily: "Arial", position: { x: 200, y: 180 } }; break;
+      case "text":      newQ = { id, name, type: "text", defaultText: "Your Name", defaultColor: "#ffffff", defaultFontSize: 38, defaultFontFamily: "Arial", position: { x: 200, y: 180 } }; break;
       case "file":      newQ = { id, name, type: "file", displayType: "logo", position: { x: 200, y: 280 }, defaultWidth: 120, defaultHeight: 120, printAreas: [], allowedTransforms: { move: true, resize: true, rotate: false } }; break;
       case "color": {
         const first = layers.find((l) => l.type === "colorable");
@@ -3440,6 +3784,7 @@ export default function BuilderPage() {
     const fd = new FormData();
     fd.append("layers", JSON.stringify(layers));
     fd.append("questions", JSON.stringify(questions));
+    fd.append("logicRules", JSON.stringify(logicRules));
     fd.append("productName", customTitle || product.title);
     fd.append("productImageUrl", product.featuredImage?.url || "");
     fd.append("productHandle", product.handle || "");
@@ -3681,7 +4026,7 @@ export default function BuilderPage() {
 
         {/* Top bar */}
         <div style={{ height: 44, background: "#fff", borderBottom: "1px solid #e5e7eb", display: "flex", alignItems: "center", padding: "0 20px", gap: 16 }}>
-          <span style={{ fontWeight: 700, fontSize: 13, borderBottom: "2px solid #111827", paddingBottom: 2 }}>Build</span>
+          <span style={{ fontWeight: 700, fontSize: 13, borderBottom: showLogicPanel ? "none" : "2px solid #111827", paddingBottom: 2, cursor: "pointer", color: showLogicPanel ? "#9ca3af" : "#111827" }} onClick={() => setShowLogicPanel(false)}>Build</span>
           <span style={{ color: "#9ca3af", fontSize: 13 }}>Pricing</span>
           <span style={{ color: "#9ca3af", fontSize: 13 }}>Variants</span>
           <Link
@@ -3690,13 +4035,29 @@ export default function BuilderPage() {
           >
             🎨 Style
           </Link>
+          <button
+            onClick={() => setShowLogicPanel((v) => !v)}
+            style={{ display: "flex", alignItems: "center", gap: 6, background: showLogicPanel ? "#111827" : "#f3f4f6", color: showLogicPanel ? "#fff" : "#374151", border: "none", borderRadius: 20, padding: "4px 14px", cursor: "pointer", fontSize: 13, fontWeight: 600 }}
+          >
+            ⚡ Logic {logicRules.length > 0 && <span style={{ background: showLogicPanel ? "rgba(255,255,255,0.25)" : "#2563eb", color: "#fff", borderRadius: 10, fontSize: 11, padding: "1px 6px" }}>{logicRules.length}</span>}
+          </button>
           {actionData?.success && (
             <span style={{ marginLeft: "auto", background: "#d1fae5", color: "#065f46", padding: "3px 12px", borderRadius: 20, fontSize: 12, fontWeight: 600 }}>✓ Saved</span>
           )}
         </div>
 
+        {/* Logic panel — shown instead of canvas when Logic tab active */}
+        {showLogicPanel && (
+          <LogicPanel
+            rules={logicRules}
+            questions={questions}
+            onChange={setLogicRules}
+            onBack={() => setShowLogicPanel(false)}
+          />
+        )}
+
         {/* Canvas area */}
-        <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", overflow: "auto", padding: 24, position: "relative" }}>
+        {!showLogicPanel && <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", overflow: "auto", padding: 24, position: "relative" }}>
 
           {/* Left navigation arrow */}
           {numViews > 1 && (
@@ -3744,7 +4105,9 @@ export default function BuilderPage() {
                       />
                     );
                   })}
-                  {textItems.map((q) => (
+                  {/* Text questions WITH a printArea → single draggable Group (rect + text preview).
+                      Text questions WITHOUT a printArea → plain draggable KonvaText (existing behaviour). */}
+                  {textItems.filter((q) => !q.printArea).map((q) => (
                     <KonvaText
                       key={q.id}
                       ref={(node) => { textNodeRefs.current[q.id] = node; }}
@@ -3765,6 +4128,79 @@ export default function BuilderPage() {
                       }}
                     />
                   ))}
+                  {/* Print area groups — text questions with printArea + file question print areas */}
+                  {(() => {
+                    if (selected?.kind !== "question") return null;
+                    const selQuestion = questions.find((q) => q.id === selected.id);
+                    if (!selQuestion) return null;
+
+                    if (selQuestion.type === "text") {
+                      const tq = selQuestion as TextQuestion;
+                      const pa = tq.printArea;
+                      if (!pa || !pa.visibleViews.includes(currentView + 1)) return null;
+                      const isActive = editingPrintAreaId === pa.id;
+                      return (
+                        <Group
+                          key={pa.id}
+                          ref={(node) => { printAreaGroupRefs.current[pa.id] = node; }}
+                          x={pa.x * S}
+                          y={pa.y * S}
+                          rotation={pa.rotation ?? 0}
+                          draggable
+                          onClick={() => setSelected({ kind: "question", id: tq.id })}
+                          onDragEnd={(e) => {
+                            const nx = Math.round(e.target.x() / S);
+                            const ny = Math.round(e.target.y() / S);
+                            updateQ({ ...tq, position: { x: nx, y: ny }, printArea: { ...pa, x: nx, y: ny } });
+                          }}
+                        >
+                          <Rect
+                            width={pa.width * S}
+                            height={pa.height * S}
+                            fill={isActive ? "rgba(59,130,246,0.08)" : "rgba(59,130,246,0.03)"}
+                            stroke={pa.showOutline ? pa.outlineColor : "#3b82f6"}
+                            strokeWidth={isActive ? 2 : 1.5}
+                            dash={[6, 3]}
+                          />
+                          <KonvaText
+                            text={tq.defaultText || tq.name}
+                            x={6}
+                            y={Math.max(6, (pa.height * S - tq.defaultFontSize * S) / 2)}
+                            width={pa.width * S - 12}
+                            fontSize={tq.defaultFontSize * S}
+                            fontFamily={tq.defaultFontFamily}
+                            fill={tq.defaultColor}
+                            wrap="word"
+                            ellipsis
+                            listening={false}
+                          />
+                        </Group>
+                      );
+                    }
+
+                    if (selQuestion.type === "file") {
+                      const fq = selQuestion as FileQuestion;
+                      return (fq.printAreas ?? [])
+                        .filter((pa) => pa.visibleViews.includes(currentView + 1))
+                        .map((pa) => (
+                          <Rect
+                            key={pa.id}
+                            x={pa.x * S}
+                            y={pa.y * S}
+                            width={pa.width * S}
+                            height={pa.height * S}
+                            rotation={pa.rotation ?? 0}
+                            fill={editingPrintAreaId === pa.id ? "rgba(59,130,246,0.08)" : "rgba(59,130,246,0.03)"}
+                            stroke={pa.showOutline ? pa.outlineColor : "#3b82f6"}
+                            strokeWidth={editingPrintAreaId === pa.id ? 2 : 1.5}
+                            dash={[6, 3]}
+                            listening={false}
+                          />
+                        ));
+                    }
+
+                    return null;
+                  })()}
                   {filePlaceholders.map((fq) => {
                     const fqTyped = fq as FileQuestion;
                     if (fqTyped.displayType === "logo") {
@@ -3839,10 +4275,10 @@ export default function BuilderPage() {
               ›
             </button>
           )}
-        </div>
+        </div>}
 
-        {/* View navigation dots */}
-        <div style={{ padding: "10px 0 0", background: "#f3f4f6", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+        {/* View navigation dots — hidden in Logic panel mode */}
+        {!showLogicPanel && <div style={{ padding: "10px 0 0", background: "#f3f4f6", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
           {Array.from({ length: numViews }).map((_, vi) => (
             <button key={vi} onClick={() => setCurrentView(vi)}
               style={{ width: vi === currentView ? 22 : 10, height: 10, borderRadius: 5, background: vi === currentView ? "#111827" : "#d1d5db", border: "none", cursor: "pointer", padding: 0, transition: "width 0.15s" }}
@@ -3859,7 +4295,7 @@ export default function BuilderPage() {
               title="Remove last view"
             >−</button>
           )}
-        </div>
+        </div>}
 
         {/* Bottom bar */}
         <div style={{ height: 58, background: "#fff", borderTop: "1px solid #e5e7eb", display: "flex", alignItems: "center", justifyContent: "center", gap: 12 }}>
@@ -3926,7 +4362,25 @@ export default function BuilderPage() {
 
       {/* ═══════════════ PRINT AREA PANEL (4th panel) ═══════════════════ */}
       {(() => {
-        if (!editingPrintAreaId || selQ?.type !== "file") return null;
+        if (!editingPrintAreaId) return null;
+
+        if (selQ?.type === "text") {
+          const tq = selQ as TextQuestion;
+          if (!tq.printArea || tq.printArea.id !== editingPrintAreaId) return null;
+          return (
+            <PrintAreaPanel
+              area={tq.printArea}
+              numViews={numViews}
+              layers={layers}
+              onClose={() => setEditingPrintAreaId(null)}
+              onDelete={() => { updateQ({ ...tq, printArea: undefined }); setEditingPrintAreaId(null); }}
+              onChange={(updated) => updateQ({ ...tq, printArea: updated })}
+              onViewChange={(v) => setCurrentView(Math.min(v - 1, numViews - 1))}
+            />
+          );
+        }
+
+        if (selQ?.type !== "file") return null;
         const fq = selQ as FileQuestion;
         const pa = (fq.printAreas ?? []).find((p) => p.id === editingPrintAreaId);
         if (!pa) return null;
@@ -3941,6 +4395,7 @@ export default function BuilderPage() {
               setEditingPrintAreaId(null);
             }}
             onChange={(updated) => updateQ({ ...fq, printAreas: (fq.printAreas ?? []).map((p) => p.id === updated.id ? updated : p) })}
+            onViewChange={(v) => setCurrentView(Math.min(v - 1, numViews - 1))}
           />
         );
       })()}
@@ -4007,6 +4462,10 @@ export default function BuilderPage() {
               onChange={updateQ}
               onSwitchType={(t) => switchQuestionType(selQ.id, t)}
               onCreateSubQuestion={addTextSubQuestion}
+              onEditPrintArea={() => {
+                const pa = (selQ as TextQuestion).printArea;
+                if (pa) setEditingPrintAreaId(pa.id);
+              }}
             />
           )}
           {selQ && selQ.type === "file" && (
