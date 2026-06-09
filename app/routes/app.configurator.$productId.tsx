@@ -210,16 +210,6 @@ export default function ConfiguratorPage() {
   const [uploadedImages, setUploadedImages] = useState<Record<string, HTMLImageElement>>({});
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  const [logoPositions, setLogoPositions] = useState<Record<string, { x: number; y: number }>>(() => {
-    const init: Record<string, { x: number; y: number }> = {};
-    for (const q of questions) {
-      if (q.type === "file") {
-        const fq = q as any;
-        init[q.id] = { x: (fq.position?.x ?? 100) * COORD_SCALE, y: (fq.position?.y ?? 100) * COORD_SCALE };
-      }
-    }
-    return init;
-  });
 
   useEffect(() => {
     if (!transformerRef.current) return;
@@ -229,11 +219,17 @@ export default function ConfiguratorPage() {
   }, [selectedId, nodeRefs]);
 
   const handleFileUpload = (questionId: string, file: File) => {
+    const fq = questions.find((q) => q.id === questionId) as any;
+    const areas = fq?.printAreas as { visibleViews: number[] }[] | undefined;
+    if (areas?.length) {
+      const targetView = areas[0].visibleViews[0];
+      if (targetView) setCurrentView(Math.min(targetView - 1, numViews - 1));
+    }
     const reader = new FileReader();
     reader.onload = () => {
       const img = new window.Image();
       img.src = reader.result as string;
-      img.onload = () => setUploadedImages((p) => ({ ...p, [questionId]: img }));
+      img.onload = () => setUploadedImages({ [questionId]: img });
     };
     reader.readAsDataURL(file);
   };
@@ -657,6 +653,7 @@ export default function ConfiguratorPage() {
                     fontSize={(textSizes[q.id] ?? q.defaultFontSize) * COORD_SCALE}
                     fontFamily={textFonts[q.id] ?? q.defaultFontFamily}
                     fill={textColors[q.id] ?? q.defaultColor}
+                    align={(q as any).textAlign ?? "left"}
                     wrap="word"
                     draggable
                     onClick={() => setSelectedId(q.id)}
@@ -665,27 +662,28 @@ export default function ConfiguratorPage() {
                 );
               })}
 
-            {fileQuestions.map((q) => {
-              const img = uploadedImages[q.id];
-              if (!img) return null;
-              const fq = q as any;
-              const pos = logoPositions[q.id] ?? { x: (fq.position?.x ?? 100) * COORD_SCALE, y: (fq.position?.y ?? 100) * COORD_SCALE };
-              return (
-                <KonvaImage
-                  key={q.id}
-                  ref={(node) => { if (node) nodeRefs[q.id] = node; }}
-                  image={img}
-                  x={pos.x}
-                  y={pos.y}
-                  width={(fq.defaultWidth ?? 120) * COORD_SCALE}
-                  height={(fq.defaultHeight ?? 120) * COORD_SCALE}
-                  draggable
-                  onClick={() => setSelectedId(q.id)}
-                  onTap={() => setSelectedId(q.id)}
-                  onDragEnd={(e) => setLogoPositions((p) => ({ ...p, [q.id]: { x: e.target.x(), y: e.target.y() } }))}
-                />
-              );
-            })}
+            {fileQuestions
+              .filter((q) => {
+                const areas = (q as any).printAreas as { visibleViews: number[] }[] | undefined;
+                if (!areas || areas.length === 0) return true;
+                return areas.some((pa) => pa.visibleViews.includes(currentView + 1));
+              })
+              .map((q) => {
+                const img = uploadedImages[q.id];
+                if (!img) return null;
+                const fq = q as any;
+                return (
+                  <KonvaImage
+                    key={q.id}
+                    image={img}
+                    x={(fq.position?.x ?? 100) * COORD_SCALE}
+                    y={(fq.position?.y ?? 100) * COORD_SCALE}
+                    width={(fq.defaultWidth ?? 120) * COORD_SCALE}
+                    height={(fq.defaultHeight ?? 120) * COORD_SCALE}
+                    listening={false}
+                  />
+                );
+              })}
 
             <Transformer ref={transformerRef} boundBoxFunc={(old, nw) => (nw.width < 20 || nw.height < 20 ? old : nw)} />
           </KonvaLayer>
