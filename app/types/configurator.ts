@@ -174,6 +174,7 @@ export interface TextQuestion {
   defaultColor: string;
   defaultFontSize: number;
   defaultFontFamily: string;
+  textAlign?: "left" | "center" | "right";
   position: { x: number; y: number };
   rotation?: number;
   printAreaId?: string;

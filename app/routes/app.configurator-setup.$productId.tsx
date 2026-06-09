@@ -118,6 +118,16 @@ const smallBtnSt: React.CSSProperties = {
   padding: "3px 9px", cursor: "pointer", fontSize: 12, fontWeight: 600, color: "#374151",
 };
 
+const toolbarBtnSt: React.CSSProperties = {
+  width: 28, height: 28, border: "1px solid transparent", borderRadius: 4,
+  background: "transparent", cursor: "pointer", fontSize: 13, color: "#374151",
+  display: "flex", alignItems: "center", justifyContent: "center", padding: 0, flexShrink: 0,
+};
+
+const toolbarDividerSt: React.CSSProperties = {
+  width: 1, height: 20, background: "#e5e7eb", flexShrink: 0, margin: "0 4px",
+};
+
 // ─── Add Question Modal (2-step) ─────────────────────────────────────────────
 
 const INPUT_TYPE_CONFIG: { type: InputType; label: string; bg: string; icon: string }[] = [
@@ -3357,6 +3367,146 @@ function LogicPanel({
   );
 }
 
+// ─── Text canvas toolbar ─────────────────────────────────────────────────────
+
+function AlignLeftIcon() {
+  return (
+    <svg width="16" height="14" viewBox="0 0 16 14" fill="none">
+      <rect x="1" y="1" width="14" height="2" rx="1" fill="currentColor"/>
+      <rect x="1" y="5" width="9" height="2" rx="1" fill="currentColor"/>
+      <rect x="1" y="9" width="11" height="2" rx="1" fill="currentColor"/>
+    </svg>
+  );
+}
+function AlignCenterIcon() {
+  return (
+    <svg width="16" height="14" viewBox="0 0 16 14" fill="none">
+      <rect x="1" y="1" width="14" height="2" rx="1" fill="currentColor"/>
+      <rect x="3.5" y="5" width="9" height="2" rx="1" fill="currentColor"/>
+      <rect x="2.5" y="9" width="11" height="2" rx="1" fill="currentColor"/>
+    </svg>
+  );
+}
+function AlignRightIcon() {
+  return (
+    <svg width="16" height="14" viewBox="0 0 16 14" fill="none">
+      <rect x="1" y="1" width="14" height="2" rx="1" fill="currentColor"/>
+      <rect x="6" y="5" width="9" height="2" rx="1" fill="currentColor"/>
+      <rect x="4" y="9" width="11" height="2" rx="1" fill="currentColor"/>
+    </svg>
+  );
+}
+
+function TextCanvasToolbar({ tq, onUpdate }: { tq: TextQuestion; onUpdate: (q: Question) => void }) {
+  const pa = tq.printArea;
+  const rotVal = pa ? (pa.rotation ?? 0) : (tq.rotation ?? 0);
+
+  const handleRot = (v: number) => {
+    if (pa) onUpdate({ ...tq, printArea: { ...pa, rotation: v } });
+    else onUpdate({ ...tq, rotation: v });
+  };
+
+  const FONTS = ["Arial", "Georgia", "Impact", "Verdana", "Courier New", "Times New Roman"];
+
+  return (
+    <div style={{ height: 44, background: "#fff", borderBottom: "1px solid #e5e7eb", display: "flex", alignItems: "center", padding: "0 12px", gap: 2, flexShrink: 0, overflowX: "auto" }}>
+
+      {/* Decorative transform mode icons */}
+      <button style={toolbarBtnSt} title="Move">✥</button>
+      <button style={toolbarBtnSt} title="Rotate">↻</button>
+      <button style={toolbarBtnSt} title="Resize">⤢</button>
+
+      <div style={toolbarDividerSt} />
+
+      {/* Text alignment */}
+      {(["left", "center", "right"] as const).map((align) => {
+        const isActive = (tq.textAlign ?? "left") === align;
+        return (
+          <button
+            key={align}
+            onClick={() => onUpdate({ ...tq, textAlign: align })}
+            title={`Align ${align}`}
+            style={{ ...toolbarBtnSt, background: isActive ? "#f3f4f6" : "transparent", border: isActive ? "1px solid #d1d5db" : "1px solid transparent", color: isActive ? "#111827" : "#6b7280" }}
+          >
+            {align === "left" && <AlignLeftIcon />}
+            {align === "center" && <AlignCenterIcon />}
+            {align === "right" && <AlignRightIcon />}
+          </button>
+        );
+      })}
+
+      <div style={toolbarDividerSt} />
+
+      {/* Color picker */}
+      <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
+        <button
+          style={{ ...toolbarBtnSt, position: "relative", overflow: "visible" }}
+          onClick={() => (document.getElementById(`tbar-color-${tq.id}`) as HTMLInputElement)?.click()}
+          title="Text color"
+        >
+          <span style={{ fontSize: 13, fontWeight: 700, color: tq.defaultColor || "#000", lineHeight: 1 }}>A</span>
+          <span style={{ position: "absolute", bottom: 2, left: "50%", transform: "translateX(-50%)", width: 14, height: 3, borderRadius: 1, background: tq.defaultColor || "#000" }} />
+        </button>
+        <input
+          id={`tbar-color-${tq.id}`}
+          type="color"
+          value={tq.defaultColor || "#000000"}
+          onChange={(e) => onUpdate({ ...tq, defaultColor: e.target.value })}
+          style={{ position: "absolute", opacity: 0, width: 0, height: 0, pointerEvents: "none" }}
+        />
+      </div>
+
+      <div style={toolbarDividerSt} />
+
+      {/* Font family */}
+      <select
+        value={tq.defaultFontFamily}
+        onChange={(e) => onUpdate({ ...tq, defaultFontFamily: e.target.value })}
+        style={{ height: 28, border: "1px solid #e5e7eb", borderRadius: 4, fontSize: 12, padding: "0 6px", background: "#fff", cursor: "pointer", maxWidth: 130 }}
+        title="Font family"
+      >
+        {FONTS.map((f) => <option key={f} value={f}>{f}</option>)}
+      </select>
+
+      <div style={toolbarDividerSt} />
+
+      {/* Font size */}
+      <div style={{ display: "flex", alignItems: "center", gap: 3 }}>
+        <span style={{ fontSize: 12, fontWeight: 700, color: "#374151" }}>A</span>
+        <input
+          type="number"
+          value={tq.defaultFontSize}
+          onChange={(e) => onUpdate({ ...tq, defaultFontSize: Math.max(6, Number(e.target.value)) })}
+          min={6} max={300}
+          style={{ width: 48, height: 28, border: "1px solid #e5e7eb", borderRadius: 4, fontSize: 12, padding: "0 4px", textAlign: "center" }}
+          title="Font size"
+        />
+        <span style={{ fontSize: 11, color: "#9ca3af" }}>px</span>
+      </div>
+
+      <div style={toolbarDividerSt} />
+
+      {/* Rotation — targets pa.rotation when print area exists, tq.rotation for bare text */}
+      <div style={{ display: "flex", alignItems: "center", gap: 3 }}>
+        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" style={{ color: "#6b7280", flexShrink: 0 }}>
+          <path d="M2 7a5 5 0 1 0 5-5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
+          <path d="M7 2 5.5 3.5 7 5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
+        <input
+          type="number"
+          value={rotVal}
+          onChange={(e) => handleRot(Number(e.target.value))}
+          min={-360} max={360}
+          style={{ width: 52, height: 28, border: "1px solid #e5e7eb", borderRadius: 4, fontSize: 12, padding: "0 4px", textAlign: "center" }}
+          title="Rotation °"
+        />
+        <span style={{ fontSize: 11, color: "#9ca3af" }}>°</span>
+      </div>
+
+    </div>
+  );
+}
+
 // ─── Main builder page ────────────────────────────────────────────────────────
 
 export default function BuilderPage() {
@@ -3564,6 +3714,7 @@ export default function BuilderPage() {
   const logoNodeRefs = useRef<Record<string, any>>({});
   const printAreaGroupRefs = useRef<Record<string, any>>({});
   const transformerRef = useRef<any>(null);
+  const printAreaTransformerRef = useRef<any>(null);
 
   // Attach transformer to the selected text or logo node
   useEffect(() => {
@@ -3572,7 +3723,6 @@ export default function BuilderPage() {
     const isTextNoPA = selQ?.type === "text" && !(selQ as TextQuestion).printArea;
     const isLogo = selQ?.type === "file" && (selQ as FileQuestion).displayType === "logo";
     if (isTextWithPA) {
-      // Print area group handles drag — no transformer needed
       transformerRef.current?.nodes([]);
       transformerRef.current?.getLayer()?.batchDraw();
     } else if (isTextNoPA && transformerRef.current && textNodeRefs.current[selQ!.id]) {
@@ -3586,6 +3736,14 @@ export default function BuilderPage() {
       transformerRef.current.getLayer()?.batchDraw();
     }
   }, [selected, questions]);
+
+  // Attach print-area transformer to the active print area group
+  useEffect(() => {
+    if (!printAreaTransformerRef.current) return;
+    const node = editingPrintAreaId ? printAreaGroupRefs.current[editingPrintAreaId] : null;
+    printAreaTransformerRef.current.nodes(node ? [node] : []);
+    printAreaTransformerRef.current.getLayer()?.batchDraw();
+  }, [editingPrintAreaId, selected]);
 
   // CRUD helpers
   const updateQ = (u: Question) => setQuestions((p) => p.map((q) => (q.id === u.id ? u : q)));
@@ -4046,6 +4204,11 @@ export default function BuilderPage() {
           )}
         </div>
 
+        {/* Text canvas toolbar — appears when a text question is selected */}
+        {!showLogicPanel && selQ?.type === "text" && (
+          <TextCanvasToolbar tq={selQ as TextQuestion} onUpdate={updateQ} />
+        )}
+
         {/* Logic panel — shown instead of canvas when Logic tab active */}
         {showLogicPanel && (
           <LogicPanel
@@ -4117,6 +4280,7 @@ export default function BuilderPage() {
                       fontSize={q.defaultFontSize * S}
                       fontFamily={q.defaultFontFamily}
                       fill={q.defaultColor}
+                      align={q.textAlign ?? "left"}
                       rotation={q.rotation ?? 0}
                       draggable
                       onClick={() => setSelected({ kind: "question", id: q.id })}
@@ -4147,11 +4311,30 @@ export default function BuilderPage() {
                           y={pa.y * S}
                           rotation={pa.rotation ?? 0}
                           draggable
-                          onClick={() => setSelected({ kind: "question", id: tq.id })}
+                          onClick={() => { setSelected({ kind: "question", id: tq.id }); setEditingPrintAreaId(pa.id); }}
                           onDragEnd={(e) => {
                             const nx = Math.round(e.target.x() / S);
                             const ny = Math.round(e.target.y() / S);
                             updateQ({ ...tq, position: { x: nx, y: ny }, printArea: { ...pa, x: nx, y: ny } });
+                          }}
+                          onTransformEnd={(e) => {
+                            const node = e.target;
+                            const sx = node.scaleX();
+                            const sy = node.scaleY();
+                            node.scaleX(1);
+                            node.scaleY(1);
+                            const newW = Math.max(20, Math.round(pa.width * Math.abs(sx)));
+                            const newH = Math.max(10, Math.round(pa.height * Math.abs(sy)));
+                            const newX = Math.round(node.x() / S);
+                            const newY = Math.round(node.y() / S);
+                            const newRot = Math.round(node.rotation());
+                            const newFontSize = Math.max(6, Math.round(tq.defaultFontSize * Math.abs(sx)));
+                            updateQ({
+                              ...tq,
+                              defaultFontSize: newFontSize,
+                              position: { x: newX, y: newY },
+                              printArea: { ...pa, x: newX, y: newY, width: newW, height: newH, rotation: newRot },
+                            });
                           }}
                         >
                           <Rect
@@ -4164,14 +4347,14 @@ export default function BuilderPage() {
                           />
                           <KonvaText
                             text={tq.defaultText || tq.name}
-                            x={6}
-                            y={Math.max(6, (pa.height * S - tq.defaultFontSize * S) / 2)}
-                            width={pa.width * S - 12}
+                            x={4}
+                            y={Math.max(4, (pa.height * S - tq.defaultFontSize * S) / 2)}
+                            width={pa.width * S - 8}
                             fontSize={tq.defaultFontSize * S}
                             fontFamily={tq.defaultFontFamily}
                             fill={tq.defaultColor}
-                            wrap="word"
-                            ellipsis
+                            align={tq.textAlign ?? "left"}
+                            wrap="none"
                             listening={false}
                           />
                         </Group>
@@ -4247,18 +4430,33 @@ export default function BuilderPage() {
                     const isLogo = selQ?.type === "file" && (selQ as FileQuestion).displayType === "logo";
                     const logoT = isLogo ? ((selQ as FileQuestion).allowedTransforms ?? { move: true, resize: true, rotate: false }) : null;
                     return (
-                      <Transformer
-                        ref={transformerRef}
-                        rotateEnabled={isLogo ? (logoT?.rotate ?? false) : true}
-                        resizeEnabled={isLogo ? (logoT?.resize ?? true) : false}
-                        keepRatio={false}
-                        rotationSnaps={[0, 45, 90, 135, 180, 225, 270, 315]}
-                        anchorSize={8}
-                        borderDash={[4, 4]}
-                        borderStroke="#3b82f6"
-                        anchorFill="#fff"
-                        anchorStroke="#3b82f6"
-                      />
+                      <>
+                        <Transformer
+                          ref={transformerRef}
+                          rotateEnabled={isLogo ? (logoT?.rotate ?? false) : true}
+                          resizeEnabled={isLogo ? (logoT?.resize ?? true) : false}
+                          keepRatio={false}
+                          rotationSnaps={[0, 45, 90, 135, 180, 225, 270, 315]}
+                          anchorSize={8}
+                          borderDash={[4, 4]}
+                          borderStroke="#3b82f6"
+                          anchorFill="#fff"
+                          anchorStroke="#3b82f6"
+                        />
+                        <Transformer
+                          ref={printAreaTransformerRef}
+                          rotateEnabled={false}
+                          resizeEnabled={true}
+                          keepRatio={false}
+                          anchorSize={9}
+                          borderDash={[4, 4]}
+                          borderStroke="#2563eb"
+                          anchorFill="#fff"
+                          anchorStroke="#2563eb"
+                          anchorCornerRadius={2}
+                          boundBoxFunc={(old, nw) => (nw.width < 20 || nw.height < 10 ? old : nw)}
+                        />
+                      </>
                     );
                   })()}
                 </KonvaLayer>

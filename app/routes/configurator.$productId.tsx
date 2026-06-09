@@ -413,14 +413,15 @@ export default function StorefrontConfiguratorPage() {
     for (const q of questions) {
       if (q.type === "thumbnail" && (q as any).displayType === "image" && q.swatches.length > 0)
         init[q.id] = q.swatches[0].value;
-      if (q.type === "dropdown" && q.defaultValue) init[q.id] = q.defaultValue;
-      if (q.type === "radio" && q.defaultValue) init[q.id] = q.defaultValue;
+      if (q.type === "dropdown") { const v = q.defaultValue || q.options[0]?.value; if (v) init[q.id] = v; }
+      if (q.type === "radio") { const v = q.defaultValue || q.options[0]?.value; if (v) init[q.id] = v; }
       if (q.type === "checkbox") init[q.id] = q.defaultChecked ? "true" : "false";
+      if (q.type === "label" && q.answers?.length) init[q.id] = q.answers[0].value;
+      if (q.type === "color" && q.swatches.length > 0) init[q.id] = q.swatches[0].value;
     }
     return init;
   });
 
-  // Colors start empty — applied only when customer picks a swatch.
   const [layerColors, setLayerColors] = useState<Record<string, string>>({});
 
   const [layerImageOverrides, setLayerImageOverrides] = useState<Record<string, string[]>>(() => {
@@ -581,11 +582,17 @@ export default function StorefrontConfiguratorPage() {
   }, []);
 
   const handleFileUpload = (questionId: string, file: File) => {
+    const fq = (questions as any[]).find((q) => q.id === questionId);
+    const areas = fq?.printAreas as { visibleViews: number[] }[] | undefined;
+    if (areas?.length) {
+      const targetView = areas[0].visibleViews[0];
+      if (targetView) setCurrentView(Math.min(targetView - 1, numViews - 1));
+    }
     const reader = new FileReader();
     reader.onload = () => {
       const img = new window.Image();
       img.src = reader.result as string;
-      img.onload = () => setUploadedImages((p) => ({ ...p, [questionId]: img }));
+      img.onload = () => setUploadedImages({ [questionId]: img });
     };
     reader.readAsDataURL(file);
   };
@@ -656,7 +663,7 @@ export default function StorefrontConfiguratorPage() {
       if (!isVisible(q, selectedAnswers)) continue;
 
       if (q.type === "color" || q.type === "thumbnail") {
-        const selectedVal = selectedAnswers[q.id];
+        const selectedVal = selectedAnswers[q.id] || q.swatches[0]?.value;
         if (selectedVal) {
           const swatch = q.swatches.find((s) => s.value === selectedVal);
           properties[q.name] = swatch ? swatch.label : selectedVal;
@@ -1343,24 +1350,27 @@ export default function StorefrontConfiguratorPage() {
                         );
                       })}
 
-                    {fileQuestions.map((q) => {
-                      const img = uploadedImages[q.id];
-                      if (!img) return null;
-                      return (
-                        <KonvaImage
-                          key={q.id}
-                          ref={(node: any) => { if (node) nodeRefs[q.id] = node; }}
-                          image={img}
-                          x={(q.position?.x ?? 100) * COORD_SCALE}
-                          y={(q.position?.y ?? 100) * COORD_SCALE}
-                          width={(q.size?.width ?? 200) * COORD_SCALE}
-                          height={(q.size?.height ?? 200) * COORD_SCALE}
-                          draggable
-                          onClick={() => setSelectedId(q.id)}
-                          onTap={() => setSelectedId(q.id)}
-                        />
-                      );
-                    })}
+                    {fileQuestions
+                      .filter((q) => {
+                        const areas = q.printAreas as { visibleViews: number[] }[] | undefined;
+                        if (!areas || areas.length === 0) return true;
+                        return areas.some((pa) => pa.visibleViews.includes(currentView + 1));
+                      })
+                      .map((q) => {
+                        const img = uploadedImages[q.id];
+                        if (!img) return null;
+                        return (
+                          <KonvaImage
+                            key={q.id}
+                            image={img}
+                            x={(q.position?.x ?? 100) * COORD_SCALE}
+                            y={(q.position?.y ?? 100) * COORD_SCALE}
+                            width={(q.defaultWidth ?? 120) * COORD_SCALE}
+                            height={(q.defaultHeight ?? 120) * COORD_SCALE}
+                            listening={false}
+                          />
+                        );
+                      })}
 
                     <Transformer ref={transformerRef} rotateEnabled />
                   </KonvaLayer>
