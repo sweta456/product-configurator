@@ -1,4 +1,19 @@
-import { useActionData, Link, useNavigation, Form, redirect } from "react-router";
+import { useActionData, useNavigation, useSubmit, redirect } from "react-router";
+import { useState, useCallback } from "react";
+import {
+  Page,
+  Layout,
+  Card,
+  FormLayout,
+  TextField,
+  Button,
+  Banner,
+  BlockStack,
+  InlineStack,
+  Text,
+  Box,
+  Divider,
+} from "@shopify/polaris";
 import { authenticate } from "../shopify.server";
 
 // ─── Action ───────────────────────────────────────────────────────────────────
@@ -14,7 +29,7 @@ export async function action({ request }: any) {
 
   if (!title) return { error: "Product name is required." };
 
-  // Step 1 — create product as ACTIVE so it's immediately purchasable
+  // Create product as DRAFT — not publicly visible until explicitly published
   const createResp = await admin.graphql(
     `mutation ProductCreate($input: ProductInput!) {
       productCreate(input: $input) {
@@ -32,7 +47,7 @@ export async function action({ request }: any) {
         input: {
           title,
           descriptionHtml: description,
-          status: "ACTIVE",
+          status: "DRAFT",
         },
       },
     },
@@ -48,7 +63,6 @@ export async function action({ request }: any) {
   const variantId = product.variants?.edges?.[0]?.node?.id;
   const inventoryItemId = product.variants?.edges?.[0]?.node?.inventoryItem?.id;
 
-  // Step 2 — set price on the default variant
   if (variantId && parseFloat(price) > 0) {
     await admin.graphql(
       `mutation VariantsBulkUpdate($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
@@ -65,7 +79,6 @@ export async function action({ request }: any) {
     );
   }
 
-  // Step 3 — set inventory quantity at the primary location
   if (inventoryItemId && stock > 0) {
     const locResp = await admin.graphql(
       `query { locations(first: 1) { edges { node { id name } } } }`,
@@ -101,80 +114,143 @@ export async function action({ request }: any) {
 export default function CreateProductPage() {
   const actionData = useActionData() as any;
   const navigation = useNavigation();
-  const saving = navigation.state === "submitting";
+  const submit = useSubmit();
 
-  const field: React.CSSProperties = {
-    display: "block", width: "100%", padding: "11px 14px",
-    border: "1px solid #d1d5db", borderRadius: 8, fontSize: 14,
-    boxSizing: "border-box", outline: "none",
-  };
-  const label: React.CSSProperties = {
-    display: "block", fontSize: 13, fontWeight: 600, color: "#374151", marginBottom: 6,
-  };
+  const [title, setTitle] = useState("");
+  const [price, setPrice] = useState("");
+  const [stock, setStock] = useState("100");
+  const [description, setDescription] = useState("");
+  const [titleError, setTitleError] = useState("");
+
+  const saving = navigation.state !== "idle";
+
+  const handleSubmit = useCallback(() => {
+    if (!title.trim()) {
+      setTitleError("Product name is required.");
+      return;
+    }
+    setTitleError("");
+    const fd = new FormData();
+    fd.set("title", title.trim());
+    fd.set("price", price || "0.00");
+    fd.set("stock", stock || "0");
+    fd.set("description", description);
+    submit(fd, { method: "post" });
+  }, [title, price, stock, description, submit]);
 
   return (
-    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#f9fafb", fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", padding: 24 }}>
-      <div style={{ width: "100%", maxWidth: 520, background: "#fff", borderRadius: 16, border: "1px solid #e5e7eb", padding: "36px 40px", boxShadow: "0 4px 24px rgba(0,0,0,0.07)" }}>
+    <Page
+      title="New Product"
+      subtitle="Create a product in your Shopify store to start building a configurator"
+      backAction={{ content: "Products", url: "/app/products" }}
+    >
+      <Layout>
+        <Layout.Section>
+          <Card>
+            <BlockStack gap="500">
+              {actionData?.error && (
+                <Banner tone="critical" title="Could not create product">
+                  <Text as="p" variant="bodyMd">{actionData.error}</Text>
+                </Banner>
+              )}
 
-        <Link to="/app/products" style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 13, color: "#6b7280", textDecoration: "none", marginBottom: 24 }}>
-          ← My Products
-        </Link>
+              <Banner tone="info" title="Saved as Draft">
+                <Text as="p" variant="bodySm">
+                  This product won't appear in your store until you publish it from the Products page.
+                </Text>
+              </Banner>
 
-        <h1 style={{ margin: "0 0 6px", fontSize: 22, fontWeight: 700, color: "#111827" }}>Create New Product</h1>
-        <p style={{ margin: "0 0 28px", fontSize: 14, color: "#6b7280" }}>
-          A new product will be created in your Shopify store and immediately published. Then you'll go straight to the builder.
-        </p>
+              <FormLayout>
+                <TextField
+                  label="Product Name"
+                  value={title}
+                  onChange={(v) => { setTitle(v); if (v.trim()) setTitleError(""); }}
+                  requiredIndicator
+                  placeholder="e.g. Custom Baseball Bat"
+                  autoComplete="off"
+                  error={titleError}
+                />
+                <FormLayout.Group>
+                  <TextField
+                    label="Price"
+                    type="number"
+                    value={price}
+                    onChange={setPrice}
+                    prefix="$"
+                    placeholder="0.00"
+                    autoComplete="off"
+                    min={0}
+                  />
+                  <TextField
+                    label="Starting Stock"
+                    type="number"
+                    value={stock}
+                    onChange={setStock}
+                    suffix="units"
+                    placeholder="100"
+                    autoComplete="off"
+                    min={0}
+                  />
+                </FormLayout.Group>
+                <TextField
+                  label="Description"
+                  value={description}
+                  onChange={setDescription}
+                  multiline={4}
+                  placeholder="Describe this product to your customers..."
+                  autoComplete="off"
+                  helpText="Optional — can be updated anytime in Shopify Admin."
+                />
+              </FormLayout>
 
-        {actionData?.error && (
-          <div style={{ marginBottom: 20, padding: "12px 14px", background: "#fef2f2", border: "1px solid #fca5a5", borderRadius: 8, color: "#b91c1c", fontSize: 14 }}>
-            {actionData.error}
-          </div>
-        )}
+              <Box paddingBlockStart="100">
+                <Button
+                  variant="primary"
+                  onClick={handleSubmit}
+                  loading={saving}
+                  size="large"
+                  fullWidth
+                >
+                  Create & Open Builder
+                </Button>
+              </Box>
+            </BlockStack>
+          </Card>
+        </Layout.Section>
 
-        <Form method="post">
-          <div style={{ marginBottom: 18 }}>
-            <label htmlFor="title" style={label}>Product Name *</label>
-            <input id="title" name="title" type="text" required placeholder="e.g. Custom Baseball Bat" style={field} />
-          </div>
-
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16, marginBottom: 18 }}>
-            <div>
-              <label htmlFor="price" style={label}>Price (USD)</label>
-              <input id="price" name="price" type="number" min="0" step="0.01" placeholder="0.00" defaultValue="" style={field} />
-            </div>
-            <div>
-              <label htmlFor="stock" style={label}>
-                Starting Stock
-                <span style={{ fontWeight: 400, color: "#9ca3af", marginLeft: 4 }}>(units)</span>
-              </label>
-              <input id="stock" name="stock" type="number" min="0" step="1" placeholder="100" defaultValue="100" style={field} />
-            </div>
-          </div>
-
-          <div style={{ marginBottom: 28 }}>
-            <label htmlFor="description" style={label}>
-              Description <span style={{ fontWeight: 400, color: "#9ca3af" }}>(optional)</span>
-            </label>
-            <textarea
-              id="description" name="description" rows={3} placeholder="Product description…"
-              style={{ ...field, resize: "vertical", fontFamily: "inherit" }}
-            />
-          </div>
-
-          <button
-            type="submit" disabled={saving}
-            style={{ display: "block", width: "100%", padding: "13px 0", background: saving ? "#6b7280" : "#111827", color: "#fff", border: "none", borderRadius: 8, fontSize: 15, fontWeight: 700, cursor: saving ? "wait" : "pointer", letterSpacing: "0.01em" }}
-          >
-            {saving ? "Creating product…" : "Create & Open Builder →"}
-          </button>
-        </Form>
-
-        <p style={{ margin: "16px 0 0", fontSize: 12, color: "#9ca3af", textAlign: "center", lineHeight: 1.5 }}>
-          Product is published as <strong>Active</strong> with stock set.
-          <br />
-          You can adjust inventory anytime from your Shopify admin.
-        </p>
-      </div>
-    </div>
+        <Layout.Section variant="oneThird">
+          <Card>
+            <BlockStack gap="400">
+              <Text variant="headingMd" as="h2">How it works</Text>
+              <Divider />
+              <BlockStack gap="400">
+                {HOW_IT_WORKS.map(({ n, title: t, desc }) => (
+                  <InlineStack key={n} gap="300" blockAlign="start" wrap={false}>
+                    <div style={{
+                      width: 28, height: 28, borderRadius: "50%",
+                      background: "#4f46e5",
+                      display: "flex", alignItems: "center", justifyContent: "center",
+                      flexShrink: 0,
+                    }}>
+                      <Text variant="bodySm" fontWeight="bold" as="span" tone="text-inverse">{n}</Text>
+                    </div>
+                    <BlockStack gap="050">
+                      <Text variant="bodyMd" fontWeight="semibold" as="p">{t}</Text>
+                      <Text variant="bodySm" tone="subdued" as="p">{desc}</Text>
+                    </BlockStack>
+                  </InlineStack>
+                ))}
+              </BlockStack>
+            </BlockStack>
+          </Card>
+        </Layout.Section>
+      </Layout>
+    </Page>
   );
 }
+
+const HOW_IT_WORKS = [
+  { n: "1", title: "Create the product", desc: "Fill in the name, price, and stock. The product is saved as Draft immediately." },
+  { n: "2", title: "Build the configurator", desc: "Add layers, swatches, text fields, and logo upload options in the Builder." },
+  { n: "3", title: "Preview & Publish", desc: "Test the configurator experience, then publish when it's ready for customers." },
+];

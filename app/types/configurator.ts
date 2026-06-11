@@ -15,7 +15,7 @@ export interface LayerAnswer {
 export interface LayerConfig {
   id: string;
   name: string;
-  type: "static" | "colorable";
+  type: "static" | "colorable" | "glb-part";
   src: string;
   displayType?: string;
   answers?: LayerAnswer[];
@@ -421,6 +421,8 @@ export interface ConfigOptions {
   productHandle?: string;
   numViews?: number;
   logicRules?: LogicRule[];
+  modelMode?: boolean;
+  glbUrl?: string;
 }
 
 export const DEFAULT_LAYERS: LayerConfig[] = [

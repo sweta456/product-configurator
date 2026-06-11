@@ -1,8 +1,10 @@
-import { useLoaderData, useSubmit, useActionData, Link, useFetcher } from "react-router";
+import { useLoaderData, useSubmit, useActionData, Link, useFetcher, useNavigate, useNavigation } from "react-router";
 import { useState, useEffect, useMemo, useRef } from "react";
 import { Stage, Layer as KonvaLayer, Text as KonvaText, Rect, Transformer, Group } from "react-konva";
 import ProductLayer from "../components/ProductLayer";
 import { ModernColorPicker } from "../components/ModernColorPicker";
+import { GlbPartSetup } from "../components/GlbPartSetup";
+import { ThreeViewer, type PartCustomization } from "../components/ThreeViewer";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import {
@@ -48,7 +50,7 @@ export async function loader({ request, params }: any) {
     admin.graphql(
       `query GetProduct($id: ID!) {
         product(id: $id) {
-          id title handle
+          id title handle status
           featuredImage { url }
           variants(first: 20) { edges { node { id title price } } }
         }
@@ -67,6 +69,22 @@ export async function action({ request, params }: any) {
   const decodedId = decodeURIComponent(params.productId);
   const formData = await request.formData();
 
+  const intent = formData.get("intent") as string | null;
+
+  if (intent === "updateProductStatus") {
+    const newStatus = formData.get("status") as string;
+    await admin.graphql(
+      `mutation UpdateProductStatus($id: ID!, $status: ProductStatus!) {
+        productUpdate(input: { id: $id, status: $status }) {
+          product { id status }
+          userErrors { field message }
+        }
+      }`,
+      { variables: { id: decodedId, status: newStatus } },
+    );
+    return { statusUpdated: true, status: newStatus };
+  }
+
   const layers = JSON.parse(formData.get("layers") as string);
   const questions = JSON.parse(formData.get("questions") as string);
   const logicRules = JSON.parse(formData.get("logicRules") as string ?? "[]");
@@ -74,8 +92,11 @@ export async function action({ request, params }: any) {
   const productImageUrl = formData.get("productImageUrl") as string;
   const productHandle = formData.get("productHandle") as string;
   const numViews = Number(formData.get("numViews") ?? 1);
+  const viewNames = JSON.parse((formData.get("viewNames") as string) ?? "[]");
   const canvasW = Number(formData.get("canvasW") ?? 520);
   const canvasH = Number(formData.get("canvasH") ?? 520);
+  const modelMode = formData.get("modelMode") === "true";
+  const glbUrl = (formData.get("glbUrl") as string) || undefined;
 
   const shopResponse = await admin.graphql(`query { shop { myshopifyDomain } }`);
   const shopData = await shopResponse.json();
@@ -83,8 +104,8 @@ export async function action({ request, params }: any) {
 
   await prisma.productConfig.upsert({
     where: { productId: decodedId },
-    create: { productId: decodedId, productName, shop, layers, options: { questions, logicRules, productImageUrl, productHandle, numViews, canvasW, canvasH } },
-    update: { productName, shop, layers, options: { questions, logicRules, productImageUrl, productHandle, numViews, canvasW, canvasH } },
+    create: { productId: decodedId, productName, shop, layers, options: { questions, logicRules, productImageUrl, productHandle, numViews, viewNames, canvasW, canvasH, modelMode, glbUrl } },
+    update: { productName, shop, layers, options: { questions, logicRules, productImageUrl, productHandle, numViews, viewNames, canvasW, canvasH, modelMode, glbUrl } },
   });
 
   await admin.graphql(
@@ -397,8 +418,10 @@ function GroupRow({ q, selected, expanded, onToggle, onSelect, onDelete, onAddCh
     >
       <div onClick={onSelect} style={{ display: "flex", alignItems: "center", gap: 6, padding: "7px 10px", cursor: "pointer", background: isDragOver ? "#dbeafe" : selected ? "#eff6ff" : "transparent", borderLeft: `3px solid ${isDragOver ? "#2563eb" : selected ? "#3b82f6" : "transparent"}`, outline: isDragOver ? "1px dashed #93c5fd" : "none", outlineOffset: -1 }}>
         <button onClick={(e) => { e.stopPropagation(); onToggle(); }}
-          style={{ background: "none", border: "none", cursor: "pointer", color: "#6b7280", fontSize: 11, padding: 0, width: 14, textAlign: "center", flexShrink: 0, lineHeight: 1 }}>
-          {expanded ? "∨" : ">"}
+          style={{ background: "none", border: "none", cursor: "pointer", padding: 0, width: 16, height: 16, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+          <svg width="11" height="11" viewBox="0 0 11 11" fill="none" style={{ transform: expanded ? "rotate(90deg)" : "rotate(0deg)", transition: "transform 0.15s" }}>
+            <path d="M3.5 2l4 3.5-4 3.5" stroke="#6b7280" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+          </svg>
         </button>
         <span style={{ fontSize: 15, flexShrink: 0 }}>📁</span>
         <span style={{ flex: 1, fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{q.name}</span>
@@ -3513,11 +3536,18 @@ export default function BuilderPage() {
   const { product, config } = useLoaderData() as any;
   const actionData = useActionData() as any;
   const submit = useSubmit();
+  const navigate = useNavigate();
+  const navigation = useNavigation();
 
   const existingOptions = config?.options as any;
 
-  const [leftTab, setLeftTab] = useState<"layers" | "settings">("layers");
+  const [leftTab, setLeftTab] = useState<"layers" | "settings" | "model">("layers");
+  const [modelMode, setModelMode] = useState<boolean>((existingOptions?.modelMode as boolean) ?? false);
+  const [glbUrl, setGlbUrl] = useState<string | undefined>(existingOptions?.glbUrl as string | undefined);
   const [customTitle, setCustomTitle] = useState<string>(product.title ?? "");
+  const [productStatus, setProductStatus] = useState<string>(product.status ?? "DRAFT");
+  const [showStatusMenu, setShowStatusMenu] = useState(false);
+  const statusFetcher = useFetcher<{ statusUpdated?: boolean; status?: string }>();
   const [canvasW, setCanvasW] = useState<number>((existingOptions?.canvasW as number) ?? CANVAS_SIZE);
   const [canvasH, setCanvasH] = useState<number>((existingOptions?.canvasH as number) ?? CANVAS_SIZE);
 
@@ -3534,6 +3564,12 @@ export default function BuilderPage() {
   const [showAddModal, setShowAddModal] = useState(false);
 
   const [numViews, setNumViews] = useState<number>((existingOptions?.numViews as number) ?? 1);
+  const [viewNames, setViewNames] = useState<string[]>(() => {
+    const saved = existingOptions?.viewNames as string[] | undefined;
+    const n = (existingOptions?.numViews as number) ?? 1;
+    const defaults = ["Front", "Back", "Side", "Detail"];
+    return Array.from({ length: n }, (_, i) => saved?.[i] || defaults[i] || `View ${i + 1}`);
+  });
   const [currentView, setCurrentView] = useState(0);
   const [answerEditState, setAnswerEditState] = useState<{ questionId: string; answerIdx: number } | null>(null);
   const [editingPrintAreaId, setEditingPrintAreaId] = useState<string | null>(null);
@@ -3551,6 +3587,7 @@ export default function BuilderPage() {
   const [dragOverQId, setDragOverQId] = useState<string | null>(null);
   const [dragLId, setDragLId] = useState<string | null>(null);
   const [dragOverLId, setDragOverLId] = useState<string | null>(null);
+  const [pendingPreview, setPendingPreview] = useState(false);
 
   const handleLDragStart = (id: string) => setDragLId(id);
   const handleLDragOver = (e: React.DragEvent, id: string) => { e.preventDefault(); setDragOverLId(id); };
@@ -3624,6 +3661,11 @@ export default function BuilderPage() {
 
   useEffect(() => { setMounted(true); }, []);
   useEffect(() => {
+    if (statusFetcher.data?.statusUpdated && statusFetcher.data.status) {
+      setProductStatus(statusFetcher.data.status);
+    }
+  }, [statusFetcher.data]);
+  useEffect(() => {
     setAnswerEditState(null);
     setEditingPrintAreaId(null);
     if (selected?.kind === "question") {
@@ -3677,6 +3719,19 @@ export default function BuilderPage() {
     }
     return t;
   }, [questions, selectedSwatches]);
+
+  // Derives 3D preview customizations from canvasColors/canvasTextures, filtered to GLB parts only.
+  const adminPreviewCustomizations = useMemo(() => {
+    const glbIds = new Set(layers.filter((l) => l.type === "glb-part").map((l) => l.id));
+    const result: Record<string, PartCustomization> = {};
+    for (const [id, color] of Object.entries(canvasColors)) {
+      if (glbIds.has(id)) result[id] = { ...result[id], color };
+    }
+    for (const [id, textureUrl] of Object.entries(canvasTextures)) {
+      if (glbIds.has(id)) result[id] = { ...result[id], textureUrl };
+    }
+    return result;
+  }, [layers, canvasColors, canvasTextures]);
 
   // Image-type thumbnail questions swap the entire layer src per selected answer.
   const canvasImageOverrides = useMemo(() => {
@@ -3947,10 +4002,20 @@ export default function BuilderPage() {
     fd.append("productImageUrl", product.featuredImage?.url || "");
     fd.append("productHandle", product.handle || "");
     fd.append("numViews", String(numViews));
+    fd.append("viewNames", JSON.stringify(viewNames));
     fd.append("canvasW", String(canvasW));
     fd.append("canvasH", String(canvasH));
+    fd.append("modelMode", String(modelMode));
+    if (glbUrl) fd.append("glbUrl", glbUrl);
     submit(fd, { method: "post" });
   };
+
+  useEffect(() => {
+    if (pendingPreview && navigation.state === "idle") {
+      setPendingPreview(false);
+      navigate(`/app/configurator/${encodeURIComponent(product.id)}`);
+    }
+  }, [navigation.state, pendingPreview]);
 
   const selQ = selected?.kind === "question" ? questions.find((q) => q.id === selected.id) : null;
   const selL = selected?.kind === "layer" ? layers.find((l) => l.id === selected.id) : null;
@@ -3977,29 +4042,125 @@ export default function BuilderPage() {
       {/* ═══════════════ LEFT PANEL ══════════════════════════════════════ */}
       <div style={{ width: 268, borderRight: "1px solid #e5e7eb", display: "flex", flexDirection: "column", overflow: "hidden", background: "#fff" }}>
 
-        {/* Product header */}
-        <div style={{ padding: "10px 14px", borderBottom: "1px solid #e5e7eb", display: "flex", alignItems: "center", gap: 10 }}>
-          {product.featuredImage && (
-            <img src={product.featuredImage.url} alt="" style={{ width: 28, height: 28, objectFit: "cover", borderRadius: 5, flexShrink: 0 }} />
-          )}
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontWeight: 700, fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{customTitle || product.title}</div>
-            <Link to="/app/products" style={{ fontSize: 11, color: "#9ca3af", textDecoration: "none" }}>← Products</Link>
-          </div>
-          {/* Tab icons */}
-          <div style={{ display: "flex", gap: 2, flexShrink: 0 }}>
-            <button onClick={() => setLeftTab("layers")} title="Layers"
-              style={{ width: 28, height: 28, border: "none", borderRadius: 6, background: leftTab === "layers" ? "#111827" : "#f3f4f6", color: leftTab === "layers" ? "#fff" : "#6b7280", cursor: "pointer", fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center" }}>
-              ≡
+        {/* ── Row 1: breadcrumb + status ── */}
+        <div style={{ padding: "8px 12px 6px", display: "flex", alignItems: "center", justifyContent: "space-between", background: "#fafafa", borderBottom: "1px solid #f3f4f6" }}>
+          <Link to="/app/products" style={{ fontSize: 12, color: "#6b7280", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 4, fontWeight: 500 }}>
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M7.5 2L4 6l3.5 4" stroke="#9ca3af" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+            Products
+          </Link>
+          <div style={{ position: "relative" }}>
+            <button
+              onClick={() => setShowStatusMenu((v) => !v)}
+              disabled={statusFetcher.state !== "idle"}
+              style={{
+                display: "inline-flex", alignItems: "center", gap: 4,
+                padding: "2px 8px", borderRadius: 10, border: "none", cursor: "pointer",
+                fontSize: 11, fontWeight: 600, lineHeight: 1.6,
+                background: productStatus === "ACTIVE" ? "#d1fae5" : "#f3f4f6",
+                color: productStatus === "ACTIVE" ? "#065f46" : "#6b7280",
+                opacity: statusFetcher.state !== "idle" ? 0.6 : 1,
+              }}
+            >
+              <span style={{ width: 5, height: 5, borderRadius: "50%", background: productStatus === "ACTIVE" ? "#10b981" : "#9ca3af", display: "inline-block" }} />
+              {statusFetcher.state !== "idle" ? "…" : productStatus === "ACTIVE" ? "Active" : "Draft"}
             </button>
-            <button onClick={() => setLeftTab("settings")} title="Settings"
-              style={{ width: 28, height: 28, border: "none", borderRadius: 6, background: leftTab === "settings" ? "#111827" : "#f3f4f6", color: leftTab === "settings" ? "#fff" : "#6b7280", cursor: "pointer", fontSize: 13, display: "flex", alignItems: "center", justifyContent: "center" }}>
-              ⚙
-            </button>
+            {showStatusMenu && (
+              <div
+                style={{ position: "absolute", top: "calc(100% + 4px)", right: 0, zIndex: 100, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 8, boxShadow: "0 4px 12px rgba(0,0,0,0.12)", minWidth: 130, overflow: "hidden" }}
+                onMouseLeave={() => setShowStatusMenu(false)}
+              >
+                {(["ACTIVE", "DRAFT"] as const).map((s) => (
+                  <button
+                    key={s}
+                    disabled={productStatus === s}
+                    onClick={() => {
+                      setShowStatusMenu(false);
+                      const fd = new FormData();
+                      fd.append("intent", "updateProductStatus");
+                      fd.append("status", s);
+                      statusFetcher.submit(fd, { method: "post" });
+                    }}
+                    style={{
+                      display: "flex", alignItems: "center", gap: 8, width: "100%",
+                      padding: "8px 12px", border: "none", background: productStatus === s ? "#f9fafb" : "#fff",
+                      cursor: productStatus === s ? "default" : "pointer", fontSize: 12,
+                      color: productStatus === s ? "#9ca3af" : "#111827", textAlign: "left",
+                    }}
+                  >
+                    <span style={{ width: 6, height: 6, borderRadius: "50%", background: s === "ACTIVE" ? "#10b981" : "#9ca3af", flexShrink: 0 }} />
+                    {s === "ACTIVE" ? "Active" : "Draft"}
+                    {productStatus === s && <span style={{ marginLeft: "auto", fontSize: 10, color: "#9ca3af" }}>current</span>}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         </div>
 
-        {leftTab === "settings" ? (
+        {/* ── Row 2: product image + name ── */}
+        <div style={{ padding: "10px 12px", borderBottom: "1px solid #e5e7eb", display: "flex", alignItems: "center", gap: 10 }}>
+          {product.featuredImage ? (
+            <img src={product.featuredImage.url} alt="" style={{ width: 36, height: 36, objectFit: "cover", borderRadius: 8, flexShrink: 0, border: "1px solid #e5e7eb" }} />
+          ) : (
+            <div style={{ width: 36, height: 36, borderRadius: 8, background: "#f3f4f6", border: "1px solid #e5e7eb", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 18, flexShrink: 0 }}>📦</div>
+          )}
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontWeight: 700, fontSize: 14, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", color: "#111827" }}>{customTitle || product.title}</div>
+            <div style={{ fontSize: 11, color: "#9ca3af", marginTop: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{product.handle}</div>
+          </div>
+        </div>
+
+        {/* ── Row 3: panel tab strip ── */}
+        <div style={{ display: "flex", borderBottom: "1px solid #e5e7eb" }}>
+          {([
+            { id: "layers", label: "Layers", icon: "≡" },
+            { id: "model", label: "3D", icon: "◎" },
+            { id: "settings", label: "Settings", icon: "⚙" },
+          ] as const).map(({ id, label, icon }) => (
+            <button
+              key={id}
+              onClick={() => { setLeftTab(id); if (id === "model") setModelMode(true); }}
+              style={{
+                flex: 1, height: 38, border: "none", borderBottom: leftTab === id ? "2px solid #4f46e5" : "2px solid transparent",
+                background: "none", cursor: "pointer", fontSize: 12, fontWeight: leftTab === id ? 600 : 400,
+                color: leftTab === id ? "#4f46e5" : "#6b7280", display: "flex", flexDirection: "column",
+                alignItems: "center", justifyContent: "center", gap: 1, transition: "color 0.12s",
+                marginBottom: -1,
+              }}
+            >
+              <span style={{ fontSize: 13, lineHeight: 1 }}>{icon}</span>
+              <span style={{ fontSize: 10 }}>{label}</span>
+            </button>
+          ))}
+        </div>
+
+        {leftTab === "model" ? (
+          /* ── 3D Model panel ──────────────────────────────────────────── */
+          <div style={{ flex: 1, overflowY: "auto", padding: "14px 14px 20px" }}>
+            <p style={{ margin: "0 0 12px", fontSize: 12, color: "#6b7280", lineHeight: 1.6 }}>
+              Upload a <strong>.glb</strong> file. Detected mesh parts appear below — check which parts customers can customise, then link them to questions using the mesh name as the layer ID.
+            </p>
+            <GlbPartSetup
+              glbUrl={glbUrl}
+              parts={layers.filter((l) => l.type === "glb-part")}
+              selectedPartId={selected?.kind === "layer" ? selected.id : null}
+              onPartSelect={(id) => setSelected({ kind: "layer", id })}
+              onGlbUploaded={(url, detectedParts) => {
+                setGlbUrl(url);
+                setLayers((prev) => [
+                  ...prev.filter((l) => l.type !== "glb-part"),
+                  ...detectedParts,
+                ]);
+              }}
+              onPartsChange={(updatedParts) => {
+                setLayers((prev) => [
+                  ...prev.filter((l) => l.type !== "glb-part"),
+                  ...updatedParts,
+                ]);
+              }}
+            />
+          </div>
+        ) : leftTab === "settings" ? (
           /* ── Settings panel ─────────────────────────────────────────── */
           <div style={{ flex: 1, overflowY: "auto", padding: "14px 14px 20px" }}>
 
@@ -4012,19 +4173,44 @@ export default function BuilderPage() {
             <div style={{ marginBottom: 20 }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
                 <label style={{ fontSize: 10, fontWeight: 700, color: "#6b7280", textTransform: "uppercase", letterSpacing: "0.05em" }}>Product views</label>
-                <button onClick={() => { setNumViews((n) => n + 1); setCurrentView(numViews); }}
-                  style={{ background: "#111827", color: "#fff", border: "none", borderRadius: 4, padding: "3px 9px", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>+</button>
+                <button
+                  onClick={() => {
+                    const defaults = ["Front", "Back", "Side", "Detail"];
+                    setViewNames((prev) => [...prev, defaults[numViews] || `View ${numViews + 1}`]);
+                    setNumViews((n) => n + 1);
+                    setCurrentView(numViews);
+                  }}
+                  style={{ background: "#4f46e5", color: "#fff", border: "none", borderRadius: 4, padding: "3px 9px", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>+</button>
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
                 {Array.from({ length: numViews }).map((_, vi) => (
-                  <div key={vi} onClick={() => setCurrentView(vi)}
-                    style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 10px", background: currentView === vi ? "#eff6ff" : "#f9fafb", border: currentView === vi ? "1px solid #93c5fd" : "1px solid #e5e7eb", borderRadius: 6, cursor: "pointer" }}>
-                    <span style={{ fontSize: 13, flex: 1, fontWeight: currentView === vi ? 600 : 400 }}>
-                      View {vi + 1}{vi === 0 ? <span style={{ fontWeight: 400, color: "#9ca3af", fontSize: 11 }}> (primary)</span> : ""}
-                    </span>
+                  <div key={vi}
+                    style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 8px", background: currentView === vi ? "#eff6ff" : "#f9fafb", border: currentView === vi ? "1px solid #93c5fd" : "1px solid #e5e7eb", borderRadius: 6, cursor: "pointer" }}
+                    onClick={() => setCurrentView(vi)}
+                  >
+                    <div style={{ width: 18, height: 18, borderRadius: "50%", background: currentView === vi ? "#4f46e5" : "#e5e7eb", color: currentView === vi ? "#fff" : "#6b7280", fontSize: 10, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                      {vi + 1}
+                    </div>
+                    <input
+                      value={viewNames[vi] ?? `View ${vi + 1}`}
+                      onChange={(e) => {
+                        e.stopPropagation();
+                        setViewNames((prev) => { const n = [...prev]; n[vi] = e.target.value; return n; });
+                      }}
+                      onClick={(e) => e.stopPropagation()}
+                      style={{ flex: 1, border: "none", background: "transparent", fontSize: 13, fontWeight: currentView === vi ? 600 : 400, color: "#111827", outline: "none", padding: 0, cursor: "text", minWidth: 0 }}
+                      placeholder={`View ${vi + 1}`}
+                    />
+                    {vi === 0 && <span style={{ fontSize: 10, color: "#9ca3af", flexShrink: 0 }}>primary</span>}
                     {numViews > 1 && vi === numViews - 1 && (
-                      <button onClick={(e) => { e.stopPropagation(); setNumViews((n) => n - 1); setCurrentView((v) => Math.min(v, numViews - 2)); }}
-                        style={{ background: "none", border: "none", color: "#d1d5db", cursor: "pointer", fontSize: 16, padding: 0 }}>×</button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setViewNames((prev) => prev.slice(0, -1));
+                          setNumViews((n) => n - 1);
+                          setCurrentView((v) => Math.min(v, numViews - 2));
+                        }}
+                        style={{ background: "none", border: "none", color: "#d1d5db", cursor: "pointer", fontSize: 16, padding: 0, lineHeight: 1, flexShrink: 0 }}>×</button>
                     )}
                   </div>
                 ))}
@@ -4062,9 +4248,9 @@ export default function BuilderPage() {
 
             {/* ── QUESTIONS section ── */}
             <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0, borderBottom: "2px solid #e5e7eb" }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px 4px", flexShrink: 0 }}>
-              <span style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "#9ca3af" }}>Questions</span>
-              <button onClick={() => setShowAddModal(true)} title="Add question" style={{ ...smallBtnSt, background: "#111827", color: "#fff", borderRadius: 6, padding: "3px 10px" }}>+ Add</button>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px 6px", flexShrink: 0 }}>
+              <span style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "#6b7280" }}>Questions</span>
+              <button onClick={() => setShowAddModal(true)} title="Add question" style={{ background: "#4f46e5", color: "#fff", border: "none", borderRadius: 6, padding: "3px 10px", cursor: "pointer", fontSize: 12, fontWeight: 600 }}>+ Add</button>
             </div>
             <div style={{ flex: 1, overflowY: "auto", minHeight: 0 }}>
 
@@ -4141,12 +4327,12 @@ export default function BuilderPage() {
 
             {/* ── BEHIND THE SCENE section ── */}
             <div style={{ flex: 1, display: "flex", flexDirection: "column", minHeight: 0 }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px 4px", flexShrink: 0 }}>
-              <span style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "#9ca3af" }}>Behind the scene</span>
-              <button onClick={() => setShowAddLayerModal(true)} style={smallBtnSt}>+</button>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "10px 14px 6px", flexShrink: 0 }}>
+              <span style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.08em", color: "#6b7280" }}>Behind the scene</span>
+              <button onClick={() => setShowAddLayerModal(true)} style={{ background: "#f3f4f6", border: "none", borderRadius: 6, padding: "3px 9px", cursor: "pointer", fontSize: 13, fontWeight: 700, color: "#374151" }}>+</button>
             </div>
             <div style={{ flex: 1, overflowY: "auto", minHeight: 0 }}>
-            {layers.map((l, idx) => {
+            {layers.filter((l) => l.type !== "glb-part").map((l, idx) => {
               const forwardNames = (l.applyOn ?? []).map((qid) => questions.find((q) => q.id === qid)?.name).filter(Boolean) as string[];
               const reverseNames = questions.filter((q) => (q as any).applyOn?.includes(l.id)).map((q) => q.name);
               const allLinkedNames = [...new Set([...forwardNames, ...reverseNames])];
@@ -4172,9 +4358,13 @@ export default function BuilderPage() {
         {/* Footer */}
         <div style={{ padding: "10px 14px", borderTop: "1px solid #e5e7eb", display: "flex", flexDirection: "column", gap: 6 }}>
           {config && (
-            <Link to={`/app/configurator/${encodeURIComponent(product.id)}`} style={{ fontSize: 12, color: "#2563eb", textDecoration: "none" }}>
-              Preview customer view →
-            </Link>
+            <button
+              onClick={() => { handleSave(); setPendingPreview(true); }}
+              disabled={pendingPreview}
+              style={{ fontSize: 12, color: "#2563eb", textDecoration: "none", background: "none", border: "none", padding: 0, cursor: pendingPreview ? "wait" : "pointer" }}
+            >
+              {pendingPreview ? "Saving…" : "Preview customer view →"}
+            </button>
           )}
         </div>
       </div>
@@ -4183,25 +4373,35 @@ export default function BuilderPage() {
       <div style={{ flex: 1, display: "flex", flexDirection: "column", background: "#f3f4f6", overflow: "hidden" }}>
 
         {/* Top bar */}
-        <div style={{ height: 44, background: "#fff", borderBottom: "1px solid #e5e7eb", display: "flex", alignItems: "center", padding: "0 20px", gap: 16 }}>
-          <span style={{ fontWeight: 700, fontSize: 13, borderBottom: showLogicPanel ? "none" : "2px solid #111827", paddingBottom: 2, cursor: "pointer", color: showLogicPanel ? "#9ca3af" : "#111827" }} onClick={() => setShowLogicPanel(false)}>Build</span>
-          <span style={{ color: "#9ca3af", fontSize: 13 }}>Pricing</span>
-          <span style={{ color: "#9ca3af", fontSize: 13 }}>Variants</span>
-          <Link
-            to={`/app/configurator-style/${encodeURIComponent(product.id)}`}
-            style={{ color: "#5c6ac4", fontSize: 13, fontWeight: 500, textDecoration: "none", padding: "2px 10px", borderRadius: 20, border: "1.5px solid #5c6ac4", lineHeight: "20px" }}
-          >
-            🎨 Style
-          </Link>
+        <div style={{ height: 46, background: "#fff", borderBottom: "1px solid #e5e7eb", display: "flex", alignItems: "center", padding: "0 16px", gap: 0 }}>
           <button
-            onClick={() => setShowLogicPanel((v) => !v)}
-            style={{ display: "flex", alignItems: "center", gap: 6, background: showLogicPanel ? "#111827" : "#f3f4f6", color: showLogicPanel ? "#fff" : "#374151", border: "none", borderRadius: 20, padding: "4px 14px", cursor: "pointer", fontSize: 13, fontWeight: 600 }}
+            onClick={() => setShowLogicPanel(false)}
+            style={{ height: 46, padding: "0 16px", background: "none", border: "none", borderBottom: showLogicPanel ? "2px solid transparent" : "2px solid #4f46e5", cursor: "pointer", fontSize: 13, fontWeight: 600, color: showLogicPanel ? "#9ca3af" : "#4f46e5", marginBottom: -1, whiteSpace: "nowrap" }}
           >
-            ⚡ Logic {logicRules.length > 0 && <span style={{ background: showLogicPanel ? "rgba(255,255,255,0.25)" : "#2563eb", color: "#fff", borderRadius: 10, fontSize: 11, padding: "1px 6px" }}>{logicRules.length}</span>}
+            Build
           </button>
-          {actionData?.success && (
-            <span style={{ marginLeft: "auto", background: "#d1fae5", color: "#065f46", padding: "3px 12px", borderRadius: 20, fontSize: 12, fontWeight: 600 }}>✓ Saved</span>
-          )}
+          <span style={{ color: "#d1d5db", fontSize: 13, padding: "0 16px", height: 46, display: "flex", alignItems: "center", whiteSpace: "nowrap" }}>Pricing</span>
+          <span style={{ color: "#d1d5db", fontSize: 13, padding: "0 16px", height: 46, display: "flex", alignItems: "center", whiteSpace: "nowrap" }}>Variants</span>
+          <div style={{ flex: 1 }} />
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <Link
+              to={`/app/configurator-style/${encodeURIComponent(product.id)}`}
+              style={{ display: "inline-flex", alignItems: "center", gap: 5, color: "#5c6ac4", fontSize: 12, fontWeight: 500, textDecoration: "none", padding: "5px 12px", borderRadius: 6, border: "1px solid #e0d9ff", background: "#f5f3ff", whiteSpace: "nowrap" }}
+            >
+              Style
+            </Link>
+            <button
+              onClick={() => setShowLogicPanel((v) => !v)}
+              style={{ display: "inline-flex", alignItems: "center", gap: 5, background: showLogicPanel ? "#4f46e5" : "#f3f4f6", color: showLogicPanel ? "#fff" : "#374151", border: "none", borderRadius: 6, padding: "5px 12px", cursor: "pointer", fontSize: 12, fontWeight: 600, whiteSpace: "nowrap" }}
+            >
+              Logic {logicRules.length > 0 && (
+                <span style={{ background: showLogicPanel ? "rgba(255,255,255,0.3)" : "#4f46e5", color: "#fff", borderRadius: 10, fontSize: 11, padding: "0 5px", minWidth: 16, textAlign: "center" }}>{logicRules.length}</span>
+              )}
+            </button>
+            {actionData?.success && (
+              <span style={{ background: "#d1fae5", color: "#065f46", padding: "4px 10px", borderRadius: 6, fontSize: 12, fontWeight: 600, whiteSpace: "nowrap" }}>✓ Saved</span>
+            )}
+          </div>
         </div>
 
         {/* Text canvas toolbar — appears when a text question is selected */}
@@ -4232,7 +4432,21 @@ export default function BuilderPage() {
 
           {mounted ? (
             <div style={{ position: "relative", borderRadius: 6, overflow: "hidden" }}>
-              {/*background: "repeating-conic-gradient(#d1d5db 0% 25%, #e5e7eb 0% 50%) 0 0 / 16px 16px" */}
+
+              {/* ── 3D preview ── */}
+              {modelMode && glbUrl ? (
+                <ThreeViewer
+                  glbUrl={glbUrl}
+                  parts={layers}
+                  customizations={adminPreviewCustomizations}
+                  width={displayW}
+                  height={displayH}
+                  selectedPartId={selected?.kind === "layer" ? selected.id : null}
+                  onPartClick={(meshName) => setSelected({ kind: "layer", id: meshName })}
+                />
+              ) : (
+
+              <>
               {layers.length === 0 && (
                 <div style={{ position: "absolute", inset: 0, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 10, color: "#9ca3af", zIndex: 1, pointerEvents: "none" }}>
                   <div style={{ fontSize: 40 }}>🎨</div>
@@ -4461,6 +4675,9 @@ export default function BuilderPage() {
                   })()}
                 </KonvaLayer>
               </Stage>
+              </>
+              )} {/* end 3D / 2D branch */}
+
             </div>
           ) : (
             <div style={{ width: displayW, height: displayH, background: "#e5e7eb", borderRadius: 6, display: "flex", alignItems: "center", justifyContent: "center", color: "#9ca3af", fontSize: 14 }}>Loading canvas…</div>
@@ -4475,29 +4692,50 @@ export default function BuilderPage() {
           )}
         </div>}
 
-        {/* View navigation dots — hidden in Logic panel mode */}
-        {!showLogicPanel && <div style={{ padding: "10px 0 0", background: "#f3f4f6", display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
-          {Array.from({ length: numViews }).map((_, vi) => (
-            <button key={vi} onClick={() => setCurrentView(vi)}
-              style={{ width: vi === currentView ? 22 : 10, height: 10, borderRadius: 5, background: vi === currentView ? "#111827" : "#d1d5db", border: "none", cursor: "pointer", padding: 0, transition: "width 0.15s" }}
-              title={`View ${vi + 1}`}
-            />
-          ))}
-          <button onClick={() => { setNumViews((n) => n + 1); setCurrentView(numViews); }}
-            style={{ background: "none", border: "1px dashed #d1d5db", borderRadius: 5, width: 22, height: 22, cursor: "pointer", fontSize: 14, color: "#9ca3af", display: "flex", alignItems: "center", justifyContent: "center", padding: 0 }}
-            title="Add view"
-          >+</button>
-          {numViews > 1 && (
-            <button onClick={() => { setNumViews((n) => n - 1); setCurrentView((v) => Math.min(v, numViews - 2)); }}
-              style={{ background: "none", border: "1px dashed #fca5a5", borderRadius: 5, width: 22, height: 22, cursor: "pointer", fontSize: 12, color: "#ef4444", display: "flex", alignItems: "center", justifyContent: "center", padding: 0 }}
-              title="Remove last view"
-            >−</button>
-          )}
-        </div>}
+        {/* View navigation tabs — hidden in Logic panel mode */}
+        {!showLogicPanel && (
+          <div style={{ background: "#f3f4f6", borderTop: "1px solid #e5e7eb", display: "flex", alignItems: "center", justifyContent: "center", gap: 4, padding: "6px 12px", overflowX: "auto" }}>
+            {Array.from({ length: numViews }).map((_, vi) => (
+              <button key={vi} onClick={() => setCurrentView(vi)}
+                style={{
+                  height: 28, padding: "0 12px", borderRadius: 6, border: "none",
+                  background: vi === currentView ? "#4f46e5" : "#fff",
+                  color: vi === currentView ? "#fff" : "#6b7280",
+                  cursor: "pointer", fontSize: 12, fontWeight: vi === currentView ? 600 : 400,
+                  whiteSpace: "nowrap", boxShadow: vi === currentView ? "0 1px 4px rgba(79,70,229,0.3)" : "0 1px 2px rgba(0,0,0,0.06)",
+                  transition: "background 0.12s",
+                }}
+              >
+                {viewNames[vi] || `View ${vi + 1}`}
+              </button>
+            ))}
+            <button
+              onClick={() => {
+                const defaults = ["Front", "Back", "Side", "Detail"];
+                setViewNames((prev) => [...prev, defaults[numViews] || `View ${numViews + 1}`]);
+                setNumViews((n) => n + 1);
+                setCurrentView(numViews);
+              }}
+              style={{ height: 28, width: 28, borderRadius: 6, border: "1px dashed #d1d5db", background: "none", cursor: "pointer", fontSize: 16, color: "#9ca3af", display: "flex", alignItems: "center", justifyContent: "center", padding: 0, flexShrink: 0 }}
+              title="Add view"
+            >+</button>
+            {numViews > 1 && (
+              <button
+                onClick={() => {
+                  setViewNames((prev) => prev.slice(0, -1));
+                  setNumViews((n) => n - 1);
+                  setCurrentView((v) => Math.min(v, numViews - 2));
+                }}
+                style={{ height: 28, width: 28, borderRadius: 6, border: "1px dashed #fca5a5", background: "none", cursor: "pointer", fontSize: 14, color: "#ef4444", display: "flex", alignItems: "center", justifyContent: "center", padding: 0, flexShrink: 0 }}
+                title="Remove last view"
+              >−</button>
+            )}
+          </div>
+        )}
 
         {/* Bottom bar */}
         <div style={{ height: 58, background: "#fff", borderTop: "1px solid #e5e7eb", display: "flex", alignItems: "center", justifyContent: "center", gap: 12 }}>
-          <button onClick={handleSave} style={{ padding: "10px 36px", background: "#111827", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 600, fontSize: 14 }}>
+          <button onClick={handleSave} style={{ padding: "10px 40px", background: "#4f46e5", color: "#fff", border: "none", borderRadius: 8, cursor: "pointer", fontWeight: 600, fontSize: 14, letterSpacing: "0.01em", boxShadow: "0 1px 6px rgba(79,70,229,0.35)" }}>
             Save Configuration
           </button>
         </div>
@@ -4602,19 +4840,20 @@ export default function BuilderPage() {
       <div style={{ width: 300, borderLeft: "1px solid #e5e7eb", background: "#fff", display: "flex", flexDirection: "column", overflow: "hidden" }}>
 
         {selQ?.type === "thumbnail" ? (
-          <div style={{ padding: "10px 16px", borderBottom: "1px solid #e5e7eb", display: "flex", alignItems: "center", gap: 8 }}>
-            <span style={{ fontWeight: 700, fontSize: 13, color: "#2563eb", borderBottom: "2px solid #2563eb", paddingBottom: 2 }}>Question</span>
-            <span style={{ fontSize: 14, color: "#9ca3af", cursor: "pointer", marginLeft: 4 }}>⚙</span>
+          <div style={{ padding: "11px 16px", borderBottom: "1px solid #e5e7eb", display: "flex", alignItems: "center", gap: 8, background: "#fafafa" }}>
+            <span style={{ fontWeight: 700, fontSize: 13, color: "#4f46e5", borderBottom: "2px solid #4f46e5", paddingBottom: 2 }}>Question</span>
             <button onClick={() => removeQ(selQ.id)}
-              style={{ marginLeft: "auto", background: "none", border: "none", color: "#9ca3af", cursor: "pointer", fontSize: 20, lineHeight: 1, padding: 0 }}>⋮</button>
+              style={{ marginLeft: "auto", background: "none", border: "1px solid #fca5a5", color: "#ef4444", borderRadius: 6, padding: "3px 10px", cursor: "pointer", fontSize: 12, fontWeight: 500 }}>
+              Remove
+            </button>
           </div>
         ) : (
-          <div style={{ padding: "12px 16px", borderBottom: "1px solid #e5e7eb", display: "flex", alignItems: "center", gap: 10 }}>
-            <span style={{ fontWeight: 700, fontSize: 13 }}>{selQ ? "Question" : selL ? "Layer" : "Properties"}</span>
+          <div style={{ padding: "11px 16px", borderBottom: "1px solid #e5e7eb", display: "flex", alignItems: "center", gap: 10, background: "#fafafa" }}>
+            <span style={{ fontWeight: 700, fontSize: 13, color: "#111827" }}>{selQ ? "Question" : selL ? "Layer" : "Properties"}</span>
             {(selQ || selL) && (
               <button
                 onClick={() => { if (selQ) removeQ(selQ.id); else if (selL) removeL(selL.id); }}
-                style={{ marginLeft: "auto", background: "none", border: "1px solid #fca5a5", color: "#ef4444", borderRadius: 6, padding: "3px 10px", cursor: "pointer", fontSize: 12 }}
+                style={{ marginLeft: "auto", background: "none", border: "1px solid #fca5a5", color: "#ef4444", borderRadius: 6, padding: "3px 10px", cursor: "pointer", fontSize: 12, fontWeight: 500 }}
               >
                 Remove
               </button>
@@ -4624,9 +4863,10 @@ export default function BuilderPage() {
 
         <div style={{ flex: 1, overflowY: "auto" }}>
           {!selected && (
-            <div style={{ padding: "40px 20px", textAlign: "center", color: "#9ca3af" }}>
-              <div style={{ fontSize: 36, marginBottom: 12 }}>👈</div>
-              <p style={{ margin: 0, fontSize: 13, lineHeight: 1.6 }}>Select a <strong>question</strong> or <strong>layer</strong> in the left panel to configure it here.</p>
+            <div style={{ padding: "48px 24px", textAlign: "center" }}>
+              <div style={{ width: 52, height: 52, borderRadius: 14, background: "#f5f3ff", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 14px", fontSize: 22 }}>🎛️</div>
+              <p style={{ margin: "0 0 6px", fontSize: 14, fontWeight: 600, color: "#374151" }}>No selection</p>
+              <p style={{ margin: 0, fontSize: 13, color: "#9ca3af", lineHeight: 1.6 }}>Select a <strong style={{ color: "#4f46e5" }}>question</strong> or <strong style={{ color: "#4f46e5" }}>layer</strong> in the left panel to configure it here.</p>
             </div>
           )}
 
@@ -4714,7 +4954,28 @@ export default function BuilderPage() {
               onSwitchType={(t) => switchQuestionType(selQ.id, t)}
             />
           )}
-          {selL && (
+          {selL && selL.type === "glb-part" ? (
+            /* GLB part — show mesh info instead of image upload */
+            <div style={{ padding: "16px 14px", display: "flex", flexDirection: "column", gap: 14 }}>
+              <div>
+                <label style={labelSt}>Mesh ID (use as Layer ID in questions)</label>
+                <div style={{ ...inputSt, background: "#f3f4f6", userSelect: "all", fontFamily: "monospace", fontSize: 12 }}>
+                  {selL.id}
+                </div>
+              </div>
+              <div>
+                <label style={labelSt}>Display name</label>
+                <input
+                  style={inputSt}
+                  value={selL.name}
+                  onChange={(e) => updateL({ ...selL, name: e.target.value })}
+                />
+              </div>
+              <p style={{ margin: 0, fontSize: 12, color: "#6b7280", lineHeight: 1.6 }}>
+                This is a 3D mesh part. To customise it, create a <strong>Color</strong> or <strong>Thumbnail</strong> question and set its layer ID to <code style={{ background: "#f3f4f6", padding: "1px 4px", borderRadius: 3 }}>{selL.id}</code>.
+              </p>
+            </div>
+          ) : selL ? (
             <LayerEditorComp
               layer={selL} numViews={numViews} onChange={updateL}
               layers={layers} questions={questions}
@@ -4725,7 +4986,7 @@ export default function BuilderPage() {
                 setLayerPreviewAnswerIdx((p) => ({ ...p, [selL.id]: idx ?? 0 }))
               }
             />
-          )}
+          ) : null}
         </div>
       </div>
     </div>

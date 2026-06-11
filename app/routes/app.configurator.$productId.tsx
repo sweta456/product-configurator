@@ -1,7 +1,8 @@
 import { useLoaderData, Link } from "react-router";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { Stage, Layer as KonvaLayer, Text as KonvaText, Image as KonvaImage, Transformer } from "react-konva";
 import ProductLayer from "../components/ProductLayer";
+import { ThreeViewer, type PartCustomization } from "../components/ThreeViewer";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import {
@@ -10,10 +11,14 @@ import {
   type ColorQuestion,
   type ThumbnailQuestion,
   type DropdownQuestion,
+  type AppSettings,
+  type ConfiguratorStyle,
   type LogicRule,
   getLayerSrc,
   migrateOptions,
   evaluateLogicRules,
+  DEFAULT_STYLE,
+  DEFAULT_APP_SETTINGS,
 } from "../types/configurator";
 
 const CANVAS_SIZE = 800;
@@ -23,10 +28,11 @@ const COORD_SCALE = CANVAS_SIZE / 800;
 // ─── Loader ───────────────────────────────────────────────────────────────────
 
 export async function loader({ request, params }: any) {
-  const { admin } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
   const decodedId = decodeURIComponent(params.productId);
+  const shop: string = session.shop;
 
-  const [productResponse, config] = await Promise.all([
+  const [productResponse, config, appSettingsRecord] = await Promise.all([
     admin.graphql(
       `query GetProduct($id: ID!) {
         product(id: $id) {
@@ -38,10 +44,23 @@ export async function loader({ request, params }: any) {
       { variables: { id: decodedId } },
     ),
     prisma.productConfig.findUnique({ where: { productId: decodedId } }),
+    (prisma as any).appSettings.findUnique({ where: { shop } }),
   ]);
 
   const productJson = await productResponse.json();
-  return { product: productJson.data.product, config };
+  const appSettings: AppSettings = { ...DEFAULT_APP_SETTINGS, ...((appSettingsRecord?.settings as any) ?? {}) };
+  const opts = (config as any)?.options ?? {};
+  const configuratorStyle: ConfiguratorStyle = {
+    ...DEFAULT_STYLE,
+    swatchShape: appSettings.swatchShape,
+    swatchSize: appSettings.swatchSize,
+    ...(opts.configuratorStyle ?? {}),
+  };
+
+  const modelMode: boolean = opts.modelMode === true;
+  const glbUrl: string | undefined = opts.glbUrl as string | undefined;
+
+  return { product: productJson.data.product, config, appSettings, configuratorStyle, modelMode, glbUrl };
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -131,7 +150,17 @@ function AdminImageDropdown({ q, selectedVals, onToggle, onHoverImages, qLabel }
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function ConfiguratorPage() {
-  const { product, config } = useLoaderData() as any;
+  const { product, config, appSettings, configuratorStyle, modelMode, glbUrl } = useLoaderData() as any;
+
+  const appSet: AppSettings = { ...DEFAULT_APP_SETTINGS, ...(appSettings ?? {}) };
+  const cfStyle: ConfiguratorStyle = { ...DEFAULT_STYLE, swatchShape: appSet.swatchShape, swatchSize: appSet.swatchSize, ...(configuratorStyle ?? {}) };
+
+  // Derived style values from settings
+  const swatchPx = cfStyle.swatchSize === "sm" ? 28 : cfStyle.swatchSize === "md" ? 36 : 46;
+  const swatchRadius = cfStyle.swatchShape === "circle" ? "50%" : cfStyle.swatchShape === "square" ? "4px" : "8px";
+  const thumbPx = cfStyle.thumbnailSize === "sm" ? 44 : cfStyle.thumbnailSize === "md" ? 56 : 70;
+  const thumbRadius = cfStyle.thumbnailShape === "circle" ? "50%" : cfStyle.thumbnailShape === "square" ? "4px" : "10px";
+  const swatchGap = appSet.spaceBetweenOptions;
 
   const stageRef = useRef<any>(null);
   const transformerRef = useRef<any>(null);
@@ -209,7 +238,19 @@ export default function ConfiguratorPage() {
 
   const [uploadedImages, setUploadedImages] = useState<Record<string, HTMLImageElement>>({});
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [hoveredPartIds, setHoveredPartIds] = useState<string[]>([]);
 
+  const glbCustomizations = useMemo<Record<string, PartCustomization>>(() => {
+    const glbIds = new Set(layers.filter((l: any) => l.type === "glb-part").map((l: any) => l.id));
+    const result: Record<string, PartCustomization> = {};
+    for (const [id, color] of Object.entries(layerColors)) {
+      if (glbIds.has(id)) result[id] = { ...result[id], color: color as string };
+    }
+    for (const [id, textureUrl] of Object.entries(layerTextures)) {
+      if (glbIds.has(id)) result[id] = { ...result[id], textureUrl: textureUrl as string };
+    }
+    return result;
+  }, [layers, layerColors, layerTextures]);
 
   useEffect(() => {
     if (!transformerRef.current) return;
@@ -290,15 +331,18 @@ export default function ConfiguratorPage() {
   // ── no config ──────────────────────────────────────────────────────────────
   if (!config) {
     return (
-      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "70vh", fontFamily: "sans-serif", gap: 14 }}>
-        <div style={{ fontSize: 52 }}>🎨</div>
-        <h2 style={{ margin: 0 }}>{product.title}</h2>
-        <p style={{ margin: 0, color: "#6b7280" }}>No configurator has been set up for this product yet.</p>
+      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "70vh", fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", gap: 16 }}>
+        <div style={{ width: 64, height: 64, borderRadius: 16, background: "#f3f4f6", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 32 }}>🎨</div>
+        <div style={{ textAlign: "center" }}>
+          <p style={{ margin: "0 0 6px", fontSize: 18, fontWeight: 700, color: "#111827" }}>{product.title}</p>
+          <p style={{ margin: 0, fontSize: 14, color: "#6b7280" }}>No configurator set up for this product yet.</p>
+        </div>
         <Link
           to={`/app/configurator-setup/${encodeURIComponent(product.id)}`}
-          style={{ padding: "12px 24px", background: "#111827", color: "#fff", borderRadius: 8, textDecoration: "none", fontWeight: 600 }}
+          style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "10px 20px", background: "#4f46e5", color: "#fff", borderRadius: 8, textDecoration: "none", fontWeight: 600, fontSize: 14 }}
         >
-          Open Builder →
+          Open Builder
+          <svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M5 2l5 5-5 5" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
         </Link>
       </div>
     );
@@ -317,16 +361,19 @@ export default function ConfiguratorPage() {
     return true;
   });
 
-  const qLabel: React.CSSProperties = { fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: "#6b7280", marginBottom: 8 };
+  const qLabel: React.CSSProperties = { fontSize: 12, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em", color: appSet.globalTextColor, marginBottom: 8 };
 
   return (
     <div style={{ display: "grid", gridTemplateColumns: "290px 1fr", height: "100vh", fontFamily: "-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" }}>
 
       {/* ── Left panel ────────────────────────────────────────────────── */}
       <div style={{ borderRight: "1px solid #e5e7eb", background: "#fff", display: "flex", flexDirection: "column", overflow: "hidden" }}>
-        <div style={{ padding: "16px 18px 12px", borderBottom: "1px solid #f3f4f6" }}>
-          <h2 style={{ margin: "0 0 4px", fontSize: 16, fontWeight: 700 }}>{product.title}</h2>
-          <Link to={`/app/configurator-setup/${encodeURIComponent(product.id)}`} style={{ fontSize: 12, color: "#6b7280", textDecoration: "none" }}>Edit setup →</Link>
+        <div style={{ padding: "16px 18px 14px", borderBottom: "1px solid #e5e7eb", background: "#fafafa" }}>
+          <p style={{ margin: "0 0 2px", fontSize: 15, fontWeight: 700, color: "#111827", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{product.title}</p>
+          <Link to={`/app/configurator-setup/${encodeURIComponent(product.id)}`} style={{ fontSize: 12, color: "#6b7280", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 3 }}>
+            Edit setup
+            <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M3 1.5l3.5 3.5-3.5 3.5" stroke="#6b7280" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          </Link>
         </div>
 
         {/* Questions rendered in ORIGINAL ORDER (preserves merchant-configured sequence) */}
@@ -353,7 +400,7 @@ export default function ConfiguratorPage() {
                 return (
                   <div key={q.id} style={{ marginTop: 22 }}>
                     <div style={qLabel}>{q.name}</div>
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: swatchGap }}>
                       {labelAnswers.map((a: any) => {
                         const isActive = activeVals.includes(a.value);
                         const hasViewImages = a.viewImages?.some(Boolean);
@@ -385,7 +432,7 @@ export default function ConfiguratorPage() {
               return (
                 <div key={q.id} style={{ marginTop: 22 }}>
                   <div style={qLabel}>{q.name}</div>
-                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <div style={{ display: "flex", gap: swatchGap, flexWrap: "wrap" }}>
                     {q.swatches.map((s) => {
                       const isActive = activeVal === s.value;
                       return (
@@ -393,8 +440,8 @@ export default function ConfiguratorPage() {
                           key={s.value} title={s.label}
                           onClick={() => handleSwatchClick(q as ColorQuestion, s.value, s.imageUrl)}
                           style={{
-                            width: 36, height: 36,
-                            borderRadius: s.imageUrl ? 6 : "50%",
+                            width: swatchPx, height: swatchPx,
+                            borderRadius: s.imageUrl ? 6 : swatchRadius,
                             background: s.imageUrl ? "none" : s.value,
                             backgroundImage: s.imageUrl ? `url(${s.imageUrl})` : "none",
                             backgroundSize: "cover",
@@ -415,7 +462,7 @@ export default function ConfiguratorPage() {
               return (
                 <div key={q.id} style={{ marginTop: 22 }}>
                   <div style={qLabel}>{q.name}</div>
-                  <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                  <div style={{ display: "flex", gap: swatchGap, flexWrap: "wrap" }}>
                     {q.swatches.map((s) => {
                       const isActive = activeVal === s.value;
                       return (
@@ -423,7 +470,7 @@ export default function ConfiguratorPage() {
                           key={s.value} title={s.label}
                           onClick={() => handleSwatchClick(q as ThumbnailQuestion, s.value, s.imageUrl)}
                           style={{
-                            width: 56, height: 56, borderRadius: 8, overflow: "hidden", padding: 0, cursor: "pointer",
+                            width: thumbPx, height: thumbPx, borderRadius: thumbRadius, overflow: "hidden", padding: 0, cursor: "pointer",
                             border: isActive ? "3px solid #111827" : "2px solid #e5e7eb",
                             outline: isActive ? "2px solid #fff" : "none", outlineOffset: -3,
                             background: s.imageUrl ? "none" : s.value,
@@ -580,11 +627,16 @@ export default function ConfiguratorPage() {
           })}
         </div>
 
-        <div style={{ padding: "12px 18px", borderTop: "1px solid #e5e7eb" }}>
-          <button onClick={exportDesign} style={{ width: "100%", padding: 12, background: "#111827", color: "#fff", border: "none", borderRadius: 8, fontWeight: 600, fontSize: 14, cursor: "pointer" }}>
+        <div style={{ padding: "14px 18px", borderTop: "1px solid #e5e7eb", background: "#fafafa" }}>
+          <button
+            onClick={exportDesign}
+            style={{ width: "100%", padding: "11px 0", background: "#4f46e5", color: "#fff", border: "none", borderRadius: 8, fontWeight: 600, fontSize: 14, cursor: "pointer", letterSpacing: "0.01em" }}
+          >
             Export Design
           </button>
-          <Link to="/app/products" style={{ display: "block", textAlign: "center", marginTop: 8, fontSize: 12, color: "#9ca3af", textDecoration: "none" }}>← Back to products</Link>
+          <Link to="/app/products" style={{ display: "block", textAlign: "center", marginTop: 10, fontSize: 12, color: "#9ca3af", textDecoration: "none" }}>
+            ← Back to products
+          </Link>
         </div>
       </div>
 
@@ -593,6 +645,16 @@ export default function ConfiguratorPage() {
         style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", background: "#f3f4f6", gap: 12 }}
         onClick={(e) => { if ((e.target as HTMLElement) === e.currentTarget) setSelectedId(null); }}
       >
+        {modelMode && glbUrl ? (
+          <ThreeViewer
+            glbUrl={glbUrl}
+            parts={layers.filter((l: any) => l.type === "glb-part")}
+            customizations={glbCustomizations}
+            width={CANVAS_SIZE}
+            height={CANVAS_SIZE}
+            hoveredPartIds={hoveredPartIds}
+          />
+        ) : (
         <Stage
           width={CANVAS_SIZE} height={CANVAS_SIZE}
           ref={stageRef}
@@ -612,13 +674,14 @@ export default function ConfiguratorPage() {
                 return src ? <ProductLayer key={`q-bg-${qId}`} src={src} width={CANVAS_SIZE} height={CANVAS_SIZE} /> : null;
               })
             )}
-            {layers.map((layer) => {
+            {layers.map((layer: any) => {
+              if (layer.type === "glb-part") return null;
               const overrideImages = layerImageOverrides[layer.id];
               let src: string;
               if (overrideImages) {
                 const slot = overrideImages[currentView];
                 const baseSrc = getLayerSrc(layer, currentView);
-                src = (slot != null && slot !== "") ? slot : (baseSrc || overrideImages.find((s) => s !== "" && s != null) || "");
+                src = (slot != null && slot !== "") ? slot : (baseSrc || overrideImages.find((s: string) => s !== "" && s != null) || "");
               } else {
                 src = getLayerSrc(layer, currentView);
               }
@@ -688,6 +751,7 @@ export default function ConfiguratorPage() {
             <Transformer ref={transformerRef} boundBoxFunc={(old, nw) => (nw.width < 20 || nw.height < 20 ? old : nw)} />
           </KonvaLayer>
         </Stage>
+        )}
 
         {/* View navigation dots with prev/next arrows */}
         {numViews > 1 && (
