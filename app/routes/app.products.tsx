@@ -5,6 +5,7 @@ import {
   Layout,
   Card,
   IndexTable,
+  useIndexResourceState,
   Thumbnail,
   Badge,
   Button,
@@ -86,6 +87,12 @@ export async function action({ request }: any) {
   const productId = formData.get("productId") as string;
   const intent = (formData.get("intent") as string) || "publish";
 
+  if (intent === "bulkDelete") {
+    const ids = (formData.get("productIds") as string).split(",").filter(Boolean);
+    await Promise.all(ids.map((id) => prisma.productConfig.deleteMany({ where: { productId: id } })));
+    return { success: true, deleted: true };
+  }
+
   if (intent === "delete") {
     await prisma.productConfig.deleteMany({ where: { productId } });
     return { success: true, deleted: true };
@@ -158,11 +165,30 @@ export async function action({ request }: any) {
 
 export default function ProductsPage() {
   const { products } = useLoaderData() as any;
+  const bulkFetcher = useFetcher<any>();
+
+  const resourceItems = products.map((p: any) => ({ ...p, id: p.productId }));
+  const { selectedResources, allResourcesSelected, handleSelectionChange } =
+    useIndexResourceState(resourceItems);
+
+  const handleBulkDelete = useCallback(() => {
+    if (selectedResources.length === 0) return;
+    const names = products
+      .filter((p: any) => selectedResources.includes(p.productId))
+      .map((p: any) => p.shopify?.title ?? p.productName)
+      .join(", ");
+    if (confirm(`Delete ${selectedResources.length} product${selectedResources.length !== 1 ? "s" : ""}?\n\n${names}\n\nThis cannot be undone.`)) {
+      const form = new FormData();
+      form.set("intent", "bulkDelete");
+      form.set("productIds", selectedResources.join(","));
+      bulkFetcher.submit(form, { method: "post" });
+    }
+  }, [selectedResources, products, bulkFetcher]);
 
   const resourceName = { singular: "product", plural: "products" };
 
   const rowMarkup = products.map((item: any, index: number) => (
-    <ProductRow key={item.productId} item={item} index={index} />
+    <ProductRow key={item.productId} item={item} index={index} selected={selectedResources.includes(item.productId)} />
   ));
 
   return (
@@ -199,6 +225,14 @@ export default function ProductsPage() {
               <IndexTable
                 resourceName={resourceName}
                 itemCount={products.length}
+                selectedItemsCount={allResourcesSelected ? "All" : selectedResources.length}
+                onSelectionChange={handleSelectionChange}
+                promotedBulkActions={[
+                  {
+                    content: `Delete ${selectedResources.length} selected`,
+                    onAction: handleBulkDelete,
+                  },
+                ]}
                 headings={[
                   { title: "Product" },
                   { title: "Price" },
@@ -206,7 +240,6 @@ export default function ProductsPage() {
                   { title: "Status" },
                   { title: "Actions", alignment: "end" },
                 ]}
-                selectable={false}
               >
                 {rowMarkup}
               </IndexTable>
@@ -220,7 +253,7 @@ export default function ProductsPage() {
 
 // ─── Product Row ──────────────────────────────────────────────────────────────
 
-function ProductRow({ item, index }: { item: any; index: number }) {
+function ProductRow({ item, index, selected }: { item: any; index: number; selected: boolean }) {
   const { shopify, layers } = item;
   const fetcher = useFetcher<any>();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -243,7 +276,7 @@ function ProductRow({ item, index }: { item: any; index: number }) {
   );
 
   return (
-    <IndexTable.Row id={item.productId} key={item.productId} position={index}>
+    <IndexTable.Row id={item.productId} key={item.productId} position={index} selected={selected}>
       {/* Product */}
       <IndexTable.Cell>
         <InlineStack gap="300" blockAlign="center" wrap={false}>

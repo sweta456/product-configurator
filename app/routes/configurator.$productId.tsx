@@ -1,5 +1,5 @@
 import { useLoaderData, type HeadersFunction } from "react-router";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import {
   Stage,
   Layer as KonvaLayer,
@@ -8,6 +8,7 @@ import {
   Transformer,
 } from "react-konva";
 import ProductLayer from "../components/ProductLayer";
+import { ThreeViewer, type PartCustomization } from "../components/ThreeViewer";
 import prisma from "../db.server";
 import {
   type LayerConfig,
@@ -17,11 +18,13 @@ import {
   type DropdownQuestion,
   type GroupQuestion,
   type ConfiguratorStyle,
+  type AppSettings,
   type LogicRule,
   getLayerSrc,
   migrateOptions,
   evaluateLogicRules,
   DEFAULT_STYLE,
+  DEFAULT_APP_SETTINGS,
 } from "../types/configurator";
 
 export const headers: HeadersFunction = () => ({
@@ -44,22 +47,30 @@ export async function loader({ request, params }: any) {
 
   const productId = `gid://shopify/Product/${numericId}`;
 
-  const config = await prisma.productConfig.findFirst({
-    where: { productId, shop },
-  });
+  const [config, appSettingsRecord] = await Promise.all([
+    prisma.productConfig.findFirst({ where: { productId, shop } }),
+    (prisma as any).appSettings.findUnique({ where: { shop } }),
+  ]);
+
+  const appSettings: AppSettings = { ...DEFAULT_APP_SETTINGS, ...((appSettingsRecord?.settings as any) ?? {}) };
 
   if (!config) {
-    return { config: null, productName: "Product", productId };
+    return { config: null, productName: "Product", productId, appSettings };
   }
 
   const opts = (config as any).options ?? {};
   const configuratorStyle: ConfiguratorStyle = { ...DEFAULT_STYLE, ...(opts.configuratorStyle ?? {}) };
+  const modelMode: boolean = opts.modelMode === true;
+  const glbUrl: string | undefined = opts.glbUrl as string | undefined;
 
   return {
     config,
     productName: (config as any).productName ?? "Product",
     productId,
     configuratorStyle,
+    modelMode,
+    glbUrl,
+    appSettings,
   };
 }
 
@@ -99,6 +110,8 @@ const CSS_TOKENS = `
     --cf-shadow: 0 4px 16px rgba(0,0,0,0.10);
     --cf-shadow-lg: 0 8px 32px rgba(0,0,0,0.14);
     --cf-transition: 0.15s ease;
+    --cf-swatch-gap: 8px;
+    --cf-global-text-color: var(--cf-text-muted);
     font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', sans-serif;
   }
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -248,7 +261,7 @@ const CSS_TOKENS = `
     font-weight: 700;
     letter-spacing: 0.07em;
     text-transform: uppercase;
-    color: var(--cf-text-muted);
+    color: var(--cf-global-text-color);
     margin-bottom: 10px;
   }
 
@@ -258,7 +271,7 @@ const CSS_TOKENS = `
 
 // ─── Style → CSS vars ────────────────────────────────────────────────────────
 
-function buildStyleVars(s: ConfiguratorStyle): string {
+function buildStyleVars(s: ConfiguratorStyle, a: AppSettings): string {
   const swatchRadius = s.swatchShape === "circle" ? "50%" : s.swatchShape === "square" ? "4px" : "8px";
   const swatchSize = s.swatchSize === "sm" ? "28px" : s.swatchSize === "md" ? "36px" : "46px";
   const thumbRadius = s.thumbnailShape === "circle" ? "50%" : s.thumbnailShape === "square" ? "4px" : "10px";
@@ -274,7 +287,16 @@ function buildStyleVars(s: ConfiguratorStyle): string {
       --cf-thumb-size: ${thumbSize};
       --cf-thumb-radius: ${thumbRadius};
       --cf-btn-radius: ${btnRadius};
+      --cf-swatch-gap: ${a.spaceBetweenOptions}px;
+      --cf-global-text-color: ${a.globalTextColor};
+      --cf-opt-pad-top: ${a.marginTop}px;
+      --cf-opt-pad-right: ${a.marginRight}px;
+      --cf-opt-pad-bottom: ${a.marginBottom}px;
+      --cf-opt-pad-left: ${a.marginLeft}px;
+      --cf-opt-field-left: ${a.optionFieldLeftMargin}px;
     }
+    ${a.disableZoom ? ".cf-swatch:hover { transform: none !important; }" : ""}
+    ${a.disableShadow ? ".cf-swatch { box-shadow: none !important; } .cf-thumb-swatch { box-shadow: none !important; }" : ""}
   `;
 }
 
@@ -385,9 +407,16 @@ function ImageDropdown({ q, selectedVals, onToggle, onHoverImages }: {
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function StorefrontConfiguratorPage() {
-  const { config, productName, configuratorStyle } = useLoaderData() as any;
-  const cfStyle: ConfiguratorStyle = { ...DEFAULT_STYLE, ...(configuratorStyle ?? {}) };
-  const dynamicCss = buildStyleVars(cfStyle);
+  const { config, productName, configuratorStyle, modelMode, glbUrl, appSettings } = useLoaderData() as any;
+  const appSet: AppSettings = { ...DEFAULT_APP_SETTINGS, ...(appSettings ?? {}) };
+  // appSet provides global defaults; per-product configuratorStyle overrides them
+  const cfStyle: ConfiguratorStyle = {
+    ...DEFAULT_STYLE,
+    swatchShape: appSet.swatchShape,
+    swatchSize: appSet.swatchSize,
+    ...(configuratorStyle ?? {}),
+  };
+  const dynamicCss = buildStyleVars(cfStyle, appSet);
 
   const [mounted, setMounted] = useState(false);
   useEffect(() => {
@@ -513,6 +542,20 @@ export default function StorefrontConfiguratorPage() {
 
   const [uploadedImages, setUploadedImages] = useState<Record<string, HTMLImageElement>>({});
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [hoveredPartIds, setHoveredPartIds] = useState<string[]>([]);
+
+  // Build 3D customizations from layerColors/layerTextures, filtered to glb-part layers only
+  const glbCustomizations = useMemo<Record<string, PartCustomization>>(() => {
+    const glbIds = new Set(layers.filter((l: any) => l.type === "glb-part").map((l: any) => l.id));
+    const result: Record<string, PartCustomization> = {};
+    for (const [id, color] of Object.entries(layerColors)) {
+      if (glbIds.has(id)) result[id] = { ...result[id], color: color as string };
+    }
+    for (const [id, textureUrl] of Object.entries(layerTextures)) {
+      if (glbIds.has(id)) result[id] = { ...result[id], textureUrl: textureUrl as string };
+    }
+    return result;
+  }, [layers, layerColors, layerTextures]);
   const allGroupQuestionsInit = questions.filter((q) => q.type === "group") as GroupQuestion[];
   const [expandedGroupId, setExpandedGroupId] = useState<string | null>(
     allGroupQuestionsInit.length > 0 ? allGroupQuestionsInit[0].id : null,
@@ -733,6 +776,7 @@ export default function StorefrontConfiguratorPage() {
           properties,
           previewDataUrl,
           previewUrl,
+          cartAction: appSet.cartAction,
           rawSelections: { selectedAnswers, textValues, textColors, textSizes, textFonts },
         },
         "*",
@@ -855,7 +899,7 @@ export default function StorefrontConfiguratorPage() {
       const activeVal = selectedAnswers[q.id];
       return (
         <QuestionBlock key={q.id} label={q.name} isFirst={qi === 0}>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", gap: "var(--cf-swatch-gap)", flexWrap: "wrap" }}>
             {q.swatches.map((s: any) => {
               const isAct = activeVal === s.value;
               return (
@@ -864,6 +908,8 @@ export default function StorefrontConfiguratorPage() {
                   title={s.label}
                   className="cf-swatch"
                   onClick={() => handleColorSwatchClick(q as ColorQuestion, s.value, s.imageUrl)}
+                  onMouseEnter={() => { if (modelMode) setHoveredPartIds(getEffectiveLayerIds(q as ColorQuestion)); }}
+                  onMouseLeave={() => { if (modelMode) setHoveredPartIds([]); }}
                   style={{
                     width: "var(--cf-swatch-size)", height: "var(--cf-swatch-size)",
                     borderRadius: s.imageUrl ? "var(--cf-swatch-radius, 8px)" : "var(--cf-swatch-radius)",
@@ -891,7 +937,7 @@ export default function StorefrontConfiguratorPage() {
       const activeVal = selectedAnswers[q.id];
       return (
         <QuestionBlock key={q.id} label={q.name} isFirst={qi === 0}>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <div style={{ display: "flex", gap: "var(--cf-swatch-gap)", flexWrap: "wrap" }}>
             {q.swatches.map((s: any) => {
               const isAct = activeVal === s.value;
               return (
@@ -1276,7 +1322,16 @@ export default function StorefrontConfiguratorPage() {
               onClick={(e) => { if ((e.target as HTMLElement) === e.currentTarget) setSelectedId(null); }}
               style={{ position: "relative" }}
             >
-              {mounted && (
+              {mounted && modelMode && glbUrl ? (
+                <ThreeViewer
+                  glbUrl={glbUrl}
+                  parts={layers.filter((l: any) => l.type === "glb-part")}
+                  customizations={glbCustomizations}
+                  width={CANVAS_SIZE}
+                  height={CANVAS_SIZE}
+                  hoveredPartIds={hoveredPartIds}
+                />
+              ) : mounted && (
                 <Stage
                   width={CANVAS_SIZE}
                   height={CANVAS_SIZE}
@@ -1301,13 +1356,14 @@ export default function StorefrontConfiguratorPage() {
                         return src ? <ProductLayer key={`q-bg-${qId}`} src={src} width={CANVAS_SIZE} height={CANVAS_SIZE} /> : null;
                       })
                     )}
-                    {layers.map((layer) => {
+                    {layers.map((layer: any) => {
+                      if (layer.type === "glb-part") return null;
                       const overrideImages = layerImageOverrides[layer.id];
                       let src: string;
                       if (overrideImages) {
                         const slot = overrideImages[currentView];
                         const baseSrc = getLayerSrc(layer, currentView);
-                        src = (slot != null && slot !== "") ? slot : (baseSrc || overrideImages.find((s) => s !== "" && s != null) || "");
+                        src = (slot != null && slot !== "") ? slot : (baseSrc || overrideImages.find((s: string) => s !== "" && s != null) || "");
                       } else {
                         src = getLayerSrc(layer, currentView);
                       }
@@ -1473,7 +1529,13 @@ function radioLabelStyle(choiceStyle: string, active: boolean): React.CSSPropert
 
 function QuestionBlock({ label, children, isFirst }: { label: string; children: React.ReactNode; isFirst?: boolean }) {
   return (
-    <div style={{ paddingTop: isFirst ? 4 : 18, paddingBottom: 4 }}>
+    <div style={{
+      paddingTop: isFirst ? 4 : 18,
+      paddingBottom: 4,
+      paddingLeft: "var(--cf-opt-field-left, 0px)",
+      marginTop: "var(--cf-opt-pad-top, 0px)" as any,
+      marginBottom: "var(--cf-opt-pad-bottom, 0px)" as any,
+    }}>
       {label && <div className="cf-section-label">{label}</div>}
       {children}
     </div>
