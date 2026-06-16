@@ -352,7 +352,7 @@ export default function ConfiguratorPage() {
   const { hiddenQuestions } = evaluateLogicRules(logicRules, selectedAnswers);
 
   // Canvas-only question lists (used for Konva rendering below)
-  const textQuestions = questions.filter((q): q is Question & { type: "text" } => q.type === "text" && isVisible(q, selectedAnswers, hiddenQuestions));
+  const textQuestions = questions.filter((q): q is Question & { type: "text" } => q.type === "text" && (q as any).displayType !== "none" && isVisible(q, selectedAnswers, hiddenQuestions));
   const fileQuestions = questions.filter((q): q is Question & { type: "file" } => q.type === "file" && isVisible(q, selectedAnswers, hiddenQuestions));
   const visibleQuestions = questions.filter((q) => {
     if (!isVisible(q, selectedAnswers, hiddenQuestions)) return false;
@@ -601,11 +601,13 @@ export default function ConfiguratorPage() {
                       {currentLen}/{maxChars}
                     </span>
                   </div>
-                  <select value={textFonts[q.id] ?? q.defaultFontFamily} onChange={(e) => setTextFonts((p) => ({ ...p, [q.id]: e.target.value }))} style={{ width: "100%", marginTop: 8, padding: "7px 10px", border: "1px solid #e5e7eb", borderRadius: 6, fontSize: 13 }}>
-                    {["Arial", "Georgia", "Impact", "Verdana", "Courier New", "Times New Roman"].map((f) => (
-                      <option key={f} value={f}>{f}</option>
-                    ))}
-                  </select>
+                  {(q as any).displayType !== "none" && (
+                    <select value={textFonts[q.id] ?? q.defaultFontFamily} onChange={(e) => setTextFonts((p) => ({ ...p, [q.id]: e.target.value }))} style={{ width: "100%", marginTop: 8, padding: "7px 10px", border: "1px solid #e5e7eb", borderRadius: 6, fontSize: 13 }}>
+                      {["Arial", "Georgia", "Impact", "Verdana", "Courier New", "Times New Roman"].map((f) => (
+                        <option key={f} value={f}>{f}</option>
+                      ))}
+                    </select>
+                  )}
                 </div>
               );
             }

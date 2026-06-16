@@ -22,6 +22,7 @@ export interface LayerConfig {
   applyOn?: string[];
   extraViews?: string[];
   defaultColor?: string;
+  fromGlb?: boolean;
 }
 
 /** Returns the image URL for a given view index (0-based). Falls back gracefully. */
@@ -31,16 +32,27 @@ export function getLayerSrc(layer: LayerConfig, viewIndex: number, answerIdx = 0
     const answer = layer.answers[answerIdx] ?? layer.answers[0];
     if (answer?.viewImages?.length) {
       const slot = answer.viewImages[viewIndex];
-      // Only fall back when slot was never uploaded (null/undefined), not when empty-string
       if (slot != null && slot !== "") return slot;
+      // Only fall back to another view's image when NO view has been configured yet.
+      // If at least one view has an image, this layer is multi-view — return nothing for
+      // unconfigured views so a Front-only image never bleeds onto Back/Side/Detail.
+      const hasAnyConfiguredView = answer.viewImages.some((v) => v != null && v !== "");
+      if (hasAnyConfiguredView) return "";
       return answer.viewImages.find((v) => v != null && v !== "") ?? "";
     }
-    return "";
+    // Single-view imageUrl fallback — show on every view
+    return answer?.imageUrl ?? "";
   }
-  if (viewIndex === 0 || !layer.extraViews) return layer.src;
-  // Old-style: fall back to primary src only when the slot was never set (not just empty)
+  if (viewIndex === 0) return layer.src;
+  // No extraViews at all → single-view layer; show src on every view.
+  if (!layer.extraViews) return layer.src;
   const extraSlot = layer.extraViews[viewIndex - 1];
-  return (extraSlot != null && extraSlot !== "") ? extraSlot : layer.src;
+  if (extraSlot != null && extraSlot !== "") return extraSlot;
+  // Has extraViews array: only fall back to src when no extra-view slot has been set.
+  // This prevents a Front-only image from incorrectly appearing on Back/Side/Detail views
+  // when those views have separate layer images.
+  const hasAnyExtraViewSet = layer.extraViews.some((v) => v != null && v !== "");
+  return hasAnyExtraViewSet ? "" : layer.src;
 }
 
 export interface ColorSwatch {

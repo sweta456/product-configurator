@@ -32,7 +32,7 @@ export async function loader({ request }: any) {
   const { admin } = await authenticate.admin(request);
 
   const configs = await prisma.productConfig.findMany({
-    select: { productId: true, productName: true, layers: true, updatedAt: true },
+    select: { productId: true, productName: true, layers: true, options: true, updatedAt: true },
   });
 
   if (configs.length === 0) return { products: [] };
@@ -89,12 +89,38 @@ export async function action({ request }: any) {
 
   if (intent === "bulkDelete") {
     const ids = (formData.get("productIds") as string).split(",").filter(Boolean);
-    await Promise.all(ids.map((id) => prisma.productConfig.deleteMany({ where: { productId: id } })));
+    await Promise.all(
+      ids.map((id) =>
+        Promise.all([
+          prisma.productConfig.deleteMany({ where: { productId: id } }),
+          admin.graphql(
+            `mutation DeleteProduct($id: ID!) {
+              productDelete(input: { id: $id }) {
+                deletedProductId
+                userErrors { field message }
+              }
+            }`,
+            { variables: { id } },
+          ),
+        ]),
+      ),
+    );
     return { success: true, deleted: true };
   }
 
   if (intent === "delete") {
-    await prisma.productConfig.deleteMany({ where: { productId } });
+    await Promise.all([
+      prisma.productConfig.deleteMany({ where: { productId } }),
+      admin.graphql(
+        `mutation DeleteProduct($id: ID!) {
+          productDelete(input: { id: $id }) {
+            deletedProductId
+            userErrors { field message }
+          }
+        }`,
+        { variables: { id: productId } },
+      ),
+    ]);
     return { success: true, deleted: true };
   }
 
@@ -235,8 +261,6 @@ export default function ProductsPage() {
                 ]}
                 headings={[
                   { title: "Product" },
-                  { title: "Price" },
-                  { title: "Layers" },
                   { title: "Status" },
                   { title: "Actions", alignment: "end" },
                 ]}
@@ -254,13 +278,14 @@ export default function ProductsPage() {
 // ─── Product Row ──────────────────────────────────────────────────────────────
 
 function ProductRow({ item, index, selected }: { item: any; index: number; selected: boolean }) {
-  const { shopify, layers } = item;
+  const { shopify, layers, options } = item;
   const fetcher = useFetcher<any>();
   const [menuOpen, setMenuOpen] = useState(false);
   const toggleMenu = useCallback(() => setMenuOpen((v) => !v), []);
 
   const price = shopify?.priceRangeV2?.minVariantPrice;
-  const layerCount = Array.isArray(layers) ? (layers as LayerConfig[]).length : 0;
+  const viewNames: string[] = (options as any)?.viewNames ?? [];
+  const viewCount = viewNames.length || 1;
   const isActive = shopify?.status === "ACTIVE";
   const firstLayerSrc = Array.isArray(layers) && layers.length > 0 ? (layers as LayerConfig[])[0]?.src : null;
   const thumbSrc = shopify?.featuredImage?.url || firstLayerSrc;
@@ -270,14 +295,14 @@ function ProductRow({ item, index, selected }: { item: any; index: number; selec
     <Button
       variant="plain"
       icon={MenuHorizontalIcon}
-      onClick={toggleMenu}
+      onClick={(e: any) => { e.stopPropagation(); toggleMenu(); }}
       accessibilityLabel="More actions"
     />
   );
 
   return (
     <IndexTable.Row id={item.productId} key={item.productId} position={index} selected={selected}>
-      {/* Product */}
+      {/* Product — includes price + layer count as secondary info */}
       <IndexTable.Cell>
         <InlineStack gap="300" blockAlign="center" wrap={false}>
           <Thumbnail
@@ -291,105 +316,97 @@ function ProductRow({ item, index, selected }: { item: any; index: number; selec
             </Text>
             <Text variant="bodySm" tone="subdued" as="span">
               {shopify?.handle}
+              {price ? ` · ${price.currencyCode} ${Number(price.amount).toFixed(2)}` : ""}
+              {` · ${viewCount} view${viewCount !== 1 ? "s" : ""}`}
             </Text>
           </BlockStack>
         </InlineStack>
       </IndexTable.Cell>
 
-      {/* Price */}
-      <IndexTable.Cell>
-        {price ? (
-          <Text variant="bodyMd" as="span">
-            {price.currencyCode} {Number(price.amount).toFixed(2)}
-          </Text>
-        ) : (
-          <Text variant="bodySm" tone="subdued" as="span">—</Text>
-        )}
-      </IndexTable.Cell>
-
-      {/* Layers */}
-      <IndexTable.Cell>
-        <Text variant="bodySm" tone="subdued" as="span">
-          {layerCount} layer{layerCount !== 1 ? "s" : ""}
-        </Text>
-      </IndexTable.Cell>
-
       {/* Status */}
       <IndexTable.Cell>
-        <fetcher.Form method="post" style={{ display: "inline" }}>
-          <input type="hidden" name="productId" value={item.productId} />
-          <input type="hidden" name="status" value={isActive ? "DRAFT" : "ACTIVE"} />
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <Badge tone={isActive ? "success" : "attention"}>
-              {isActive ? "Active" : "Draft"}
-            </Badge>
-            {saving ? (
-              <Spinner size="small" />
-            ) : (
-              <Button variant="plain" submit size="slim" tone={isActive ? "critical" : undefined}>
-                {isActive ? "Unpublish" : "Publish"}
-              </Button>
-            )}
-          </div>
-        </fetcher.Form>
+        <div onClick={(e) => e.stopPropagation()}>
+          <fetcher.Form method="post" style={{ display: "inline" }}>
+            <input type="hidden" name="productId" value={item.productId} />
+            <input type="hidden" name="status" value={isActive ? "DRAFT" : "ACTIVE"} />
+            <InlineStack gap="200" blockAlign="center">
+              <Badge tone={isActive ? "success" : "attention"}>
+                {isActive ? "Active" : "Draft"}
+              </Badge>
+              {saving ? (
+                <Spinner size="small" />
+              ) : (
+                <Button variant="plain" submit size="slim" tone={isActive ? "critical" : undefined}>
+                  {isActive ? "Unpublish" : "Publish"}
+                </Button>
+              )}
+            </InlineStack>
+          </fetcher.Form>
+        </div>
       </IndexTable.Cell>
 
       {/* Actions */}
       <IndexTable.Cell>
-        <InlineStack gap="200" align="end" blockAlign="center" wrap={false}>
-          <Link to={`/app/configurator-setup/${encodeURIComponent(item.productId)}`} style={{ textDecoration: "none" }}>
-            <Button size="slim" variant="secondary">Builder</Button>
-          </Link>
-          <Link to={`/app/configurator-style/${encodeURIComponent(item.productId)}`} style={{ textDecoration: "none" }}>
-            <Button size="slim" variant="secondary">🎨 Style</Button>
-          </Link>
-          <Link to={`/app/inventory/${encodeURIComponent(item.productId)}`} style={{ textDecoration: "none" }}>
-            <Button size="slim" variant="secondary">Inventory</Button>
-          </Link>
-          <Link to={`/app/configurator/${encodeURIComponent(item.productId)}`} style={{ textDecoration: "none" }}>
-            <Button size="slim" variant="primary">Preview</Button>
-          </Link>
-          <Popover
-            active={menuOpen}
-            activator={menuActivator}
-            autofocusTarget="first-node"
-            onClose={toggleMenu}
-          >
-            <ActionList
-              actionRole="menuitem"
-              items={[
-                {
-                  content: "Preview",
-                  url: `/app/configurator/${encodeURIComponent(item.productId)}`,
-                  onAction: () => setMenuOpen(false),
-                },
-                {
-                  content: "Duplicate",
-                  onAction: () => {
-                    setMenuOpen(false);
-                    const form = new FormData();
-                    form.set("productId", item.productId);
-                    form.set("intent", "duplicate");
-                    fetcher.submit(form, { method: "post" });
+        <div onClick={(e) => e.stopPropagation()}>
+          <InlineStack gap="200" align="end" blockAlign="center" wrap={false}>
+            <Link to={`/app/configurator-setup/${encodeURIComponent(item.productId)}`} style={{ textDecoration: "none" }}>
+              <Button size="slim" variant="secondary">Builder</Button>
+            </Link>
+            <Link to={`/app/configurator/${encodeURIComponent(item.productId)}`} style={{ textDecoration: "none" }}>
+              <Button size="slim" variant="primary">Preview</Button>
+            </Link>
+            <Popover
+              active={menuOpen}
+              activator={menuActivator}
+              autofocusTarget="first-node"
+              onClose={toggleMenu}
+            >
+              <ActionList
+                actionRole="menuitem"
+                items={[
+                  {
+                    content: "Pricing",
+                    url: `/app/pricing/${encodeURIComponent(item.productId)}`,
+                    onAction: () => setMenuOpen(false),
                   },
-                },
-                {
-                  content: "Delete",
-                  destructive: true,
-                  onAction: () => {
-                    setMenuOpen(false);
-                    if (confirm(`Delete "${shopify?.title}"? This cannot be undone.`)) {
+                  {
+                    content: "Style",
+                    url: `/app/configurator-style/${encodeURIComponent(item.productId)}`,
+                    onAction: () => setMenuOpen(false),
+                  },
+                  {
+                    content: "Inventory",
+                    url: `/app/inventory/${encodeURIComponent(item.productId)}`,
+                    onAction: () => setMenuOpen(false),
+                  },
+                  {
+                    content: "Duplicate",
+                    onAction: () => {
+                      setMenuOpen(false);
                       const form = new FormData();
                       form.set("productId", item.productId);
-                      form.set("intent", "delete");
+                      form.set("intent", "duplicate");
                       fetcher.submit(form, { method: "post" });
-                    }
+                    },
                   },
-                },
-              ]}
-            />
-          </Popover>
-        </InlineStack>
+                  {
+                    content: "Delete",
+                    destructive: true,
+                    onAction: () => {
+                      setMenuOpen(false);
+                      if (confirm(`Delete "${shopify?.title}"? This cannot be undone.`)) {
+                        const form = new FormData();
+                        form.set("productId", item.productId);
+                        form.set("intent", "delete");
+                        fetcher.submit(form, { method: "post" });
+                      }
+                    },
+                  },
+                ]}
+              />
+            </Popover>
+          </InlineStack>
+        </div>
       </IndexTable.Cell>
     </IndexTable.Row>
   );

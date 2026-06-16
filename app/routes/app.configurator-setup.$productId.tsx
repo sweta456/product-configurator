@@ -897,6 +897,18 @@ function ThumbnailEditor({ q, layers, questions, numViews, onChange, onEditAnswe
     ...layers.map((l) => ({ id: l.id, name: l.name })),
   ];
 
+  const applyPickerRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!showApplyPicker) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (applyPickerRef.current && !applyPickerRef.current.contains(e.target as Node)) {
+        setShowApplyPicker(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [showApplyPicker]);
+
   return (
     <div>
       {/* Title */}
@@ -1037,7 +1049,7 @@ function ThumbnailEditor({ q, layers, questions, numViews, onChange, onEditAnswe
             <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
               <span style={{ fontSize: 13, color: "#9ca3af" }}>↳</span>
               <span style={{ fontSize: 12, color: "#6b7280", fontWeight: 500 }}>Apply on</span>
-              <div style={{ marginLeft: "auto", position: "relative" }} onMouseLeave={() => setShowApplyPicker(false)}>
+              <div ref={applyPickerRef} style={{ marginLeft: "auto", position: "relative" }}>
                 <button onClick={() => { setShowApplyPicker((v) => !v); setApplySearchColor(""); }}
                   style={{ display: "flex", alignItems: "center", gap: 5, padding: "4px 10px", border: "1px solid #e5e7eb", borderRadius: 6, cursor: "pointer", fontSize: 12, background: showApplyPicker ? "#eff6ff" : "#f9fafb", color: "#374151" }}>
                   <span>🏔</span><span>Image question</span><span style={{ fontWeight: 700 }}>+</span>
@@ -3139,11 +3151,13 @@ const selSt: React.CSSProperties = {
 
 function LogicRuleEditor({
   questions,
+  layers,
   onSave,
   onCancel,
   initialRule,
 }: {
   questions: Question[];
+  layers: LayerConfig[];
   onSave: (rule: LogicRule) => void;
   onCancel: () => void;
   initialRule?: LogicRule;
@@ -3151,18 +3165,27 @@ function LogicRuleEditor({
   const firstCond = initialRule?.conditions[0];
   const firstAction = initialRule?.actions[0];
 
-  const [condQId, setCondQId] = useState(firstCond?.questionId ?? questions[0]?.id ?? "");
+  const behindLayers = layers.filter((l) => l.type !== "glb-part");
+  const defaultId = questions[0]?.id ?? behindLayers[0]?.id ?? "";
+
+  const [condQId, setCondQId] = useState(firstCond?.questionId ?? defaultId);
   const [condOp, setCondOp] = useState<LogicOperator>(firstCond?.operator ?? "is");
   const [condVal, setCondVal] = useState(firstCond?.value ?? "");
-  const [actionQId, setActionQId] = useState(firstAction?.questionId ?? questions[0]?.id ?? "");
+  const [actionQId, setActionQId] = useState(firstAction?.questionId ?? defaultId);
   const [actionEffect, setActionEffect] = useState<LogicEffect>(firstAction?.effect ?? "should_be_unavailable");
   const [actionVal, setActionVal] = useState(firstAction?.value ?? "");
   const isEditing = !!initialRule;
 
   const condQ = questions.find((q) => q.id === condQId);
+  const condLayer = !condQ ? behindLayers.find((l) => l.id === condQId) : undefined;
   const actionQ = questions.find((q) => q.id === actionQId);
-  const condAnswers = condQ ? getQuestionAnswers(condQ) : [];
-  const actionAnswers = actionQ ? getQuestionAnswers(actionQ) : [];
+  const condAnswers = condQ
+    ? getQuestionAnswers(condQ)
+    : (condLayer?.answers ?? []).map((a) => ({ value: a.id, label: a.label }));
+  const actionQ2 = !actionQ ? behindLayers.find((l) => l.id === actionQId) : undefined;
+  const actionAnswers = actionQ
+    ? getQuestionAnswers(actionQ)
+    : (actionQ2?.answers ?? []).map((a) => ({ value: a.id, label: a.label }));
 
   const needsActionValue = actionEffect !== "should_be_unavailable";
   const canSave = condQId && condVal && actionQId && (!needsActionValue || actionVal);
@@ -3183,7 +3206,14 @@ function LogicRuleEditor({
         <span style={{ fontSize: 13, color: "#6b7280", fontWeight: 600 }}>When</span>
 
         <select value={condQId} onChange={(e) => { setCondQId(e.target.value); setCondVal(""); }} style={selSt}>
-          {questions.map((q) => <option key={q.id} value={q.id}>{q.name}</option>)}
+          <optgroup label="Questions">
+            {questions.map((q) => <option key={q.id} value={q.id}>{q.name}</option>)}
+          </optgroup>
+          {behindLayers.length > 0 && (
+            <optgroup label="Behind the Scene">
+              {behindLayers.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+            </optgroup>
+          )}
         </select>
 
         <select value={condOp} onChange={(e) => setCondOp(e.target.value as LogicOperator)} style={selSt}>
@@ -3201,7 +3231,14 @@ function LogicRuleEditor({
         <span style={{ fontSize: 13, color: "#6b7280", fontWeight: 600 }}>then</span>
 
         <select value={actionQId} onChange={(e) => { setActionQId(e.target.value); setActionVal(""); }} style={selSt}>
-          {questions.map((q) => <option key={q.id} value={q.id}>{q.name}</option>)}
+          <optgroup label="Questions">
+            {questions.map((q) => <option key={q.id} value={q.id}>{q.name}</option>)}
+          </optgroup>
+          {behindLayers.length > 0 && (
+            <optgroup label="Behind the Scene">
+              {behindLayers.map((l) => <option key={l.id} value={l.id}>{l.name}</option>)}
+            </optgroup>
+          )}
         </select>
 
         <select value={actionEffect} onChange={(e) => setActionEffect(e.target.value as LogicEffect)} style={selSt}>
@@ -3234,13 +3271,14 @@ function LogicRuleEditor({
   );
 }
 
-function ruleToText(rule: LogicRule, questions: Question[]): string {
-  const getQName = (id: string) => questions.find((q) => q.id === id)?.name ?? id;
+function ruleToText(rule: LogicRule, questions: Question[], layers: LayerConfig[] = []): string {
+  const getQName = (id: string) =>
+    questions.find((q) => q.id === id)?.name ?? layers.find((l) => l.id === id)?.name ?? id;
   const getAnswerLabel = (qId: string, val: string) => {
     const q = questions.find((q) => q.id === qId);
-    if (!q) return val;
-    const ans = getQuestionAnswers(q);
-    return ans.find((a) => a.value === val)?.label ?? val;
+    if (q) return getQuestionAnswers(q).find((a) => a.value === val)?.label ?? val;
+    const l = layers.find((l) => l.id === qId);
+    return l?.answers?.find((a) => a.id === val)?.label ?? val;
   };
   const EFFECT_LABELS: Record<LogicEffect, string> = {
     should_be: "should be",
@@ -3269,11 +3307,13 @@ const actionIconSt: React.CSSProperties = {
 function LogicPanel({
   rules,
   questions,
+  layers,
   onChange,
   onBack,
 }: {
   rules: LogicRule[];
   questions: Question[];
+  layers: LayerConfig[];
   onChange: (rules: LogicRule[]) => void;
   onBack: () => void;
 }) {
@@ -3283,7 +3323,7 @@ function LogicPanel({
   const [search, setSearch] = useState("");
 
   const filtered = rules.filter((r) =>
-    !search || ruleToText(r, questions).toLowerCase().includes(search.toLowerCase())
+    !search || ruleToText(r, questions, layers).toLowerCase().includes(search.toLowerCase())
   );
 
   const handleStartAdd = () => { setAddingNew(true); setEditingRuleId(null); };
@@ -3320,6 +3360,7 @@ function LogicPanel({
         {addingNew && (
           <LogicRuleEditor
             questions={questions}
+            layers={layers}
             onSave={(rule) => { onChange([...rules, rule]); setAddingNew(false); }}
             onCancel={() => setAddingNew(false)}
           />
@@ -3339,6 +3380,7 @@ function LogicPanel({
             {editingRuleId === rule.id ? (
               <LogicRuleEditor
                 questions={questions}
+                layers={layers}
                 initialRule={rule}
                 onSave={(updated) => {
                   onChange(rules.map((r) => r.id === rule.id ? updated : r));
@@ -3353,7 +3395,7 @@ function LogicPanel({
                 onMouseLeave={() => setHoveredRuleId(null)}
               >
                 <span style={{ flex: 1, fontSize: 13, color: "#374151", lineHeight: 1.5, paddingRight: hoveredRuleId === rule.id ? 112 : 0 }}>
-                  {ruleToText(rule, questions)}
+                  {ruleToText(rule, questions, layers)}
                 </span>
 
                 {hoveredRuleId === rule.id && (
@@ -4142,19 +4184,19 @@ export default function BuilderPage() {
             </p>
             <GlbPartSetup
               glbUrl={glbUrl}
-              parts={layers.filter((l) => l.type === "glb-part")}
+              parts={layers.filter((l) => l.type === "glb-part" || l.fromGlb)}
               selectedPartId={selected?.kind === "layer" ? selected.id : null}
               onPartSelect={(id) => setSelected({ kind: "layer", id })}
               onGlbUploaded={(url, detectedParts) => {
                 setGlbUrl(url);
                 setLayers((prev) => [
-                  ...prev.filter((l) => l.type !== "glb-part"),
+                  ...prev.filter((l) => !l.fromGlb && l.type !== "glb-part"),
                   ...detectedParts,
                 ]);
               }}
               onPartsChange={(updatedParts) => {
                 setLayers((prev) => [
-                  ...prev.filter((l) => l.type !== "glb-part"),
+                  ...prev.filter((l) => !l.fromGlb && l.type !== "glb-part"),
                   ...updatedParts,
                 ]);
               }}
@@ -4414,6 +4456,7 @@ export default function BuilderPage() {
           <LogicPanel
             rules={logicRules}
             questions={questions}
+            layers={layers}
             onChange={setLogicRules}
             onBack={() => setShowLogicPanel(false)}
           />
@@ -4484,7 +4527,7 @@ export default function BuilderPage() {
                   })}
                   {/* Text questions WITH a printArea → single draggable Group (rect + text preview).
                       Text questions WITHOUT a printArea → plain draggable KonvaText (existing behaviour). */}
-                  {textItems.filter((q) => !q.printArea).map((q) => (
+                  {textItems.filter((q) => !q.printArea && q.displayType !== "none").map((q) => (
                     <KonvaText
                       key={q.id}
                       ref={(node) => { textNodeRefs.current[q.id] = node; }}
@@ -4514,6 +4557,7 @@ export default function BuilderPage() {
 
                     if (selQuestion.type === "text") {
                       const tq = selQuestion as TextQuestion;
+                      if (tq.displayType === "none") return null;
                       const pa = tq.printArea;
                       if (!pa || !pa.visibleViews.includes(currentView + 1)) return null;
                       const isActive = editingPrintAreaId === pa.id;
@@ -4600,6 +4644,9 @@ export default function BuilderPage() {
                   })()}
                   {filePlaceholders.map((fq) => {
                     const fqTyped = fq as FileQuestion;
+                    const fqAreas = fqTyped.printAreas ?? [];
+                    const visibleOnView = fqAreas.length === 0 || fqAreas.some((pa) => pa.visibleViews.includes(currentView + 1));
+                    if (!visibleOnView) return null;
                     if (fqTyped.displayType === "logo") {
                       const t = fqTyped.allowedTransforms ?? { move: true, resize: true, rotate: false };
                       const w = fqTyped.defaultWidth * S;

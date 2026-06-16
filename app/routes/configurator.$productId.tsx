@@ -442,7 +442,7 @@ export default function StorefrontConfiguratorPage() {
     for (const q of questions) {
       if (q.type === "thumbnail" && (q as any).displayType === "image" && q.swatches.length > 0)
         init[q.id] = q.swatches[0].value;
-      if (q.type === "dropdown") { const v = q.defaultValue || q.options[0]?.value; if (v) init[q.id] = v; }
+      if (q.type === "dropdown") { if (q.defaultValue) init[q.id] = q.defaultValue; }
       if (q.type === "radio") { const v = q.defaultValue || q.options[0]?.value; if (v) init[q.id] = v; }
       if (q.type === "checkbox") init[q.id] = q.defaultChecked ? "true" : "false";
       if (q.type === "label" && q.answers?.length) init[q.id] = q.answers[0].value;
@@ -469,15 +469,22 @@ export default function StorefrontConfiguratorPage() {
 
   const [labelAnswerImages, setLabelAnswerImages] = useState<Record<string, (string | null)[]>>(() => {
     const init: Record<string, (string | null)[]> = {};
-    // Pre-load viewImages for dropdown/image questions that have a defaultValue or first option
     for (const q of questions) {
       if (q.type === "dropdown" && (q as DropdownQuestion).displayType === "image") {
         const dq = q as DropdownQuestion;
-        const defaultVal = dq.defaultValue || dq.options[0]?.value;
+        const defaultVal = dq.defaultValue;
         if (!defaultVal) continue;
         const opt = dq.options.find((o) => o.value === defaultVal);
         if (opt?.viewImages?.some(Boolean)) {
           init[q.id] = opt.viewImages!;
+        }
+      }
+      if (q.type === "label" && q.answers?.length) {
+        const firstAns = q.answers[0];
+        if ((firstAns as any).viewImages?.some(Boolean)) {
+          init[q.id] = (firstAns as any).viewImages;
+        } else if ((firstAns as any).imageUrl) {
+          init[q.id] = [(firstAns as any).imageUrl];
         }
       }
     }
@@ -794,7 +801,7 @@ export default function StorefrontConfiguratorPage() {
     return true;
   });
 
-  const textQuestions = visibleQuestions.filter((q) => q.type === "text") as any[];
+  const textQuestions = visibleQuestions.filter((q) => q.type === "text" && (q as any).displayType !== "none") as any[];
   const fileQuestions = visibleQuestions.filter((q) => q.type === "file") as any[];
 
   // ── Group structure ──────────────────────────────────────────────────────────
@@ -855,6 +862,8 @@ export default function StorefrontConfiguratorPage() {
               const ans = q.answers?.find((a: any) => a.value === newVal);
               if (ans?.viewImages?.some(Boolean)) {
                 setLabelAnswerImages((p) => ({ ...p, [q.id]: ans.viewImages! }));
+              } else if (ans?.imageUrl) {
+                setLabelAnswerImages((p) => ({ ...p, [q.id]: [ans.imageUrl!] }));
               } else {
                 setLabelAnswerImages((p) => { const n = { ...p }; delete n[q.id]; return n; });
               }
@@ -1345,17 +1354,6 @@ export default function StorefrontConfiguratorPage() {
                   }}
                 >
                   <KonvaLayer>
-                    {hoverViewImages ? (
-                      (() => {
-                        const src = hoverViewImages[currentView] || hoverViewImages.find(Boolean) || "";
-                        return src ? <ProductLayer key="hover-bg" src={src} width={CANVAS_SIZE} height={CANVAS_SIZE} /> : null;
-                      })()
-                    ) : (
-                      Object.entries(labelAnswerImages).map(([qId, images]) => {
-                        const src = images[currentView] || images.find(Boolean) || "";
-                        return src ? <ProductLayer key={`q-bg-${qId}`} src={src} width={CANVAS_SIZE} height={CANVAS_SIZE} /> : null;
-                      })
-                    )}
                     {layers.map((layer: any) => {
                       if (layer.type === "glb-part") return null;
                       const overrideImages = layerImageOverrides[layer.id];
@@ -1378,6 +1376,33 @@ export default function StorefrontConfiguratorPage() {
                         />
                       );
                     })}
+                    {hoverViewImages ? (
+                      (() => {
+                        const src = hoverViewImages[currentView] || "";
+                        return src ? <ProductLayer key="hover-bg" src={src} width={CANVAS_SIZE} height={CANVAS_SIZE} /> : null;
+                      })()
+                    ) : (
+                      Object.entries(labelAnswerImages)
+                        .filter(([qId]) => visibleQuestions.some((vq) => vq.id === qId))
+                        .map(([qId, images]) => {
+                          const src = images[currentView] || "";
+                          // Only apply a color if the color question targeting this label question is still visible
+                          const colorSourceVisible = visibleQuestions.some(
+                            (vq) => (vq.type === "color" || vq.type === "thumbnail") &&
+                                    ((vq as any).applyOn ?? []).includes(qId)
+                          );
+                          return src ? (
+                            <ProductLayer
+                              key={`q-bg-${qId}`}
+                              src={src}
+                              color={colorSourceVisible ? layerColors[qId] : undefined}
+                              textureUrl={colorSourceVisible ? layerTextures[qId] : undefined}
+                              width={CANVAS_SIZE}
+                              height={CANVAS_SIZE}
+                            />
+                          ) : null;
+                        })
+                    )}
 
                     {textQuestions
                       .filter((q) => {
