@@ -6,7 +6,7 @@
     "predev": "npx --yes kill-port 9293 3000",
     "dev": "shopify app dev --tunnel-url https://fragility-crinkle-bottling.ngrok-free.dev:3000",
     "tunnel": "ngrok http --domain=fragility-crinkle-bottling.ngrok-free.dev 3000",
-    "dev:cf": "shopify app dev --tunnel-url https://dedicated-yards-activation-neighbor.trycloudflare.com:3000",
+    "dev:cf": "shopify app dev --tunnel-url https://drug-self-sacred-increase.trycloudflare.com:3000",
     "tunnel:cf": "npx cloudflared tunnel --url http://localhost:3000",
     "config:link": "shopify app config link",
     "generate": "shopify app generate",

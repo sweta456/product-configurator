@@ -41,11 +41,33 @@ export async function loader({ request, params }: any) {
   return { product, productId: decodedId };
 }
 
-// ─── Action — adjust inventory quantity ───────────────────────────────────────
+// ─── Action — enable tracking or adjust inventory quantity ────────────────────
 
 export async function action({ request }: any) {
-  const { admin } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
   const formData = await request.formData();
+  const intent = formData.get("intent") as string;
+
+  if (intent === "enableTracking") {
+    const inventoryItemId = formData.get("inventoryItemId") as string;
+    const numericItemId = inventoryItemId.replace("gid://shopify/InventoryItem/", "");
+
+    await fetch(
+      `https://${session.shop}/admin/api/2024-01/inventory_items/${numericItemId}.json`,
+      {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Shopify-Access-Token": session.accessToken as string,
+        },
+        body: JSON.stringify({
+          inventory_item: { id: parseInt(numericItemId, 10), tracked: true },
+        }),
+      },
+    );
+
+    return { success: true, message: "Inventory tracking enabled." };
+  }
 
   const inventoryItemId = formData.get("inventoryItemId") as string;
   const locationId = formData.get("locationId") as string;
@@ -57,7 +79,6 @@ export async function action({ request }: any) {
   }
 
   const delta = newQty - currentQty;
-
   if (delta === 0) return { success: true, message: "No change needed." };
 
   const resp = await admin.graphql(
@@ -164,8 +185,20 @@ export default function InventoryPage() {
             </div>
 
             {!item?.tracked && (
-              <div style={{ padding: "14px 18px", color: "#9ca3af", fontSize: 13 }}>
-                Inventory tracking is disabled for this variant.
+              <div style={{ padding: "14px 18px", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 12 }}>
+                <span style={{ color: "#9ca3af", fontSize: 13 }}>Inventory tracking is disabled for this variant.</span>
+                <button
+                  disabled={saving}
+                  onClick={() => {
+                    const fd = new FormData();
+                    fd.append("intent", "enableTracking");
+                    fd.append("inventoryItemId", item.id);
+                    submit(fd, { method: "post" });
+                  }}
+                  style={{ padding: "7px 14px", background: "#4f46e5", color: "#fff", border: "none", borderRadius: 6, cursor: saving ? "wait" : "pointer", fontSize: 13, fontWeight: 600, whiteSpace: "nowrap" }}
+                >
+                  Enable Tracking
+                </button>
               </div>
             )}
 

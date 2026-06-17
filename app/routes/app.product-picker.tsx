@@ -19,7 +19,7 @@ import { authenticate } from "../shopify.server";
 // ─── Action ───────────────────────────────────────────────────────────────────
 
 export async function action({ request }: any) {
-  const { admin } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
   const formData = await request.formData();
 
   const title = (formData.get("title") as string)?.trim();
@@ -79,30 +79,44 @@ export async function action({ request }: any) {
     );
   }
 
-  if (inventoryItemId && stock > 0) {
+  if (inventoryItemId) {
     const locResp = await admin.graphql(
-      `query { locations(first: 1) { edges { node { id name } } } }`,
+      `query { locations(first: 1) { edges { node { id } } } }`,
     );
     const locData = await locResp.json();
-    const locationId = locData.data?.locations?.edges?.[0]?.node?.id;
+    const locationGid: string = locData.data?.locations?.edges?.[0]?.node?.id ?? "";
 
-    if (locationId) {
-      await admin.graphql(
-        `mutation SetInventory($input: InventoryAdjustQuantitiesInput!) {
-          inventoryAdjustQuantities(input: $input) {
-            userErrors { field message }
-          }
-        }`,
-        {
-          variables: {
-            input: {
-              name: "available",
-              reason: "correction",
-              changes: [{ inventoryItemId, locationId, delta: stock }],
-            },
-          },
-        },
-      );
+    if (locationGid) {
+      const numericItemId = inventoryItemId.replace("gid://shopify/InventoryItem/", "");
+      const numericLocId = locationGid.replace("gid://shopify/Location/", "");
+      const baseUrl = `https://${session.shop}/admin/api/2024-01`;
+      const restHeaders = {
+        "Content-Type": "application/json",
+        "X-Shopify-Access-Token": session.accessToken as string,
+      };
+
+      // Step 1: Enable tracking via REST — inventory_levels/set.json returns
+      // 422 if tracking is off, so this must come first.
+      await fetch(`${baseUrl}/inventory_items/${numericItemId}.json`, {
+        method: "PUT",
+        headers: restHeaders,
+        body: JSON.stringify({
+          inventory_item: { id: parseInt(numericItemId, 10), tracked: true },
+        }),
+      });
+
+      // Step 2: Set quantity (only if user specified stock)
+      if (stock > 0) {
+        await fetch(`${baseUrl}/inventory_levels/set.json`, {
+          method: "POST",
+          headers: restHeaders,
+          body: JSON.stringify({
+            location_id: parseInt(numericLocId, 10),
+            inventory_item_id: parseInt(numericItemId, 10),
+            available: stock,
+          }),
+        });
+      }
     }
   }
 

@@ -511,7 +511,7 @@ export default function StorefrontConfiguratorPage() {
   const [textValues, setTextValues] = useState<Record<string, string>>(() => {
     const init: Record<string, string> = {};
     for (const q of questions) {
-      if (q.type === "text") init[q.id] = q.defaultText;
+      if (q.type === "text") init[q.id] = "";
     }
     return init;
   });
@@ -709,46 +709,61 @@ export default function StorefrontConfiguratorPage() {
   const handleAddToCart = () => {
     const properties: Record<string, string> = {};
 
+    // Build reverse map: childId → group name, so grouped children get prefixed keys.
+    const childToGroupName: Record<string, string> = {};
     for (const q of questions) {
-      if (!isVisible(q, selectedAnswers)) continue;
+      if (q.type === "group") {
+        for (const childId of q.childIds) {
+          childToGroupName[childId] = q.name;
+        }
+      }
+    }
+
+    const propKey = (q: Question) => {
+      const groupName = childToGroupName[q.id];
+      return groupName ? `${groupName} - ${q.name}` : q.name;
+    };
+
+    for (const q of questions) {
+      if (!isVisible(q, selectedAnswers, hiddenQuestions)) continue;
 
       if (q.type === "color" || q.type === "thumbnail") {
         const selectedVal = selectedAnswers[q.id] || q.swatches[0]?.value;
         if (selectedVal) {
           const swatch = q.swatches.find((s) => s.value === selectedVal);
-          properties[q.name] = swatch ? swatch.label : selectedVal;
+          properties[propKey(q)] = swatch ? swatch.label : selectedVal;
         }
       } else if (q.type === "text") {
         const val = textValues[q.id];
-        if (val) properties[q.name] = val;
+        if (val) properties[propKey(q)] = val;
       } else if (q.type === "dropdown") {
         const dq = q as DropdownQuestion;
         if (dq.multipleSelection) {
           const vals = (selectedAnswers[q.id] ?? "").split(",").filter(Boolean);
           if (vals.length > 0) {
             const labels = vals.map((v) => dq.options.find((o) => o.value === v)?.label ?? v);
-            properties[q.name] = labels.join(", ");
+            properties[propKey(q)] = labels.join(", ");
           }
         } else {
           const selectedVal = selectedAnswers[q.id];
           if (selectedVal) {
             const opt = dq.options.find((o) => o.value === selectedVal);
-            properties[q.name] = opt ? opt.label : selectedVal;
+            properties[propKey(q)] = opt ? opt.label : selectedVal;
           }
         }
       } else if (q.type === "radio") {
         const selectedVal = selectedAnswers[q.id];
         if (selectedVal) {
           const opt = q.options.find((o) => o.value === selectedVal);
-          properties[q.name] = opt ? opt.label : selectedVal;
+          properties[propKey(q)] = opt ? opt.label : selectedVal;
         }
       } else if (q.type === "checkbox") {
-        properties[q.name] = selectedAnswers[q.id] === "true" ? q.checkedLabel : q.uncheckedLabel;
+        properties[propKey(q)] = selectedAnswers[q.id] === "true" ? q.checkedLabel : q.uncheckedLabel;
       } else if (q.type === "label" && (q.answers ?? []).length > 0) {
         const selectedVals = (selectedAnswers[q.id] ?? "").split(",").filter(Boolean);
         if (selectedVals.length > 0) {
           const labels = selectedVals.map((v) => q.answers!.find((a) => a.value === v)?.label ?? v);
-          properties[q.name] = labels.join(", ");
+          properties[propKey(q)] = labels.join(", ");
         }
       }
     }

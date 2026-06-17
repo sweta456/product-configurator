@@ -1,4 +1,4 @@
-import { useLoaderData, Link, useFetcher } from "react-router";
+import { useLoaderData, Link, useFetcher, useNavigate } from "react-router";
 import { useState, useCallback } from "react";
 import {
   Page,
@@ -156,7 +156,10 @@ export async function action({ request }: any) {
   const statusResp = await admin.graphql(
     `mutation UpdateProductStatus($id: ID!, $status: ProductStatus!) {
       productUpdate(input: { id: $id, status: $status }) {
-        product { id status }
+        product {
+          id status
+          variants(first: 20) { edges { node { inventoryItem { id tracked } } } }
+        }
         userErrors { field message }
       }
     }`,
@@ -165,6 +168,34 @@ export async function action({ request }: any) {
   const statusData = await statusResp.json();
   const errs = statusData.data?.productUpdate?.userErrors ?? [];
   if (errs.length > 0) return { error: errs[0].message };
+
+  // Auto-enable inventory tracking when publishing via REST
+  // (GraphQL inventoryItemUpdate fails silently on untracked items in this API version)
+  if (newStatus === "ACTIVE") {
+    const variants = statusData.data?.productUpdate?.product?.variants?.edges ?? [];
+    const untrackedItems = variants
+      .map((e: any) => e.node.inventoryItem)
+      .filter((item: any) => item && !item.tracked);
+
+    await Promise.all(
+      untrackedItems.map((item: any) => {
+        const numericItemId = (item.id as string).replace("gid://shopify/InventoryItem/", "");
+        return fetch(
+          `https://${session.shop}/admin/api/2024-01/inventory_items/${numericItemId}.json`,
+          {
+            method: "PUT",
+            headers: {
+              "Content-Type": "application/json",
+              "X-Shopify-Access-Token": session.accessToken as string,
+            },
+            body: JSON.stringify({
+              inventory_item: { id: parseInt(numericItemId, 10), tracked: true },
+            }),
+          },
+        );
+      }),
+    );
+  }
 
   const numericId = productId.replace("gid://shopify/Product/", "");
   await fetch(
@@ -280,6 +311,7 @@ export default function ProductsPage() {
 function ProductRow({ item, index, selected }: { item: any; index: number; selected: boolean }) {
   const { shopify, layers, options } = item;
   const fetcher = useFetcher<any>();
+  const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
   const toggleMenu = useCallback(() => setMenuOpen((v) => !v), []);
 
@@ -366,18 +398,15 @@ function ProductRow({ item, index, selected }: { item: any; index: number; selec
                 items={[
                   {
                     content: "Pricing",
-                    url: `/app/pricing/${encodeURIComponent(item.productId)}`,
-                    onAction: () => setMenuOpen(false),
+                    onAction: () => { setMenuOpen(false); navigate(`/app/pricing/${encodeURIComponent(item.productId)}`); },
                   },
                   {
                     content: "Style",
-                    url: `/app/configurator-style/${encodeURIComponent(item.productId)}`,
-                    onAction: () => setMenuOpen(false),
+                    onAction: () => { setMenuOpen(false); navigate(`/app/configurator-style/${encodeURIComponent(item.productId)}`); },
                   },
                   {
                     content: "Inventory",
-                    url: `/app/inventory/${encodeURIComponent(item.productId)}`,
-                    onAction: () => setMenuOpen(false),
+                    onAction: () => { setMenuOpen(false); navigate(`/app/inventory/${encodeURIComponent(item.productId)}`); },
                   },
                   {
                     content: "Duplicate",

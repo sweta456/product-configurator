@@ -26,7 +26,6 @@ import {
   type LogoAnswer,
   type PrintArea,
   type LogicRule,
-  type LogicCondition,
   type LogicAction,
   type LogicOperator,
   type LogicEffect,
@@ -35,7 +34,6 @@ import {
   getQuestionAnswers,
   DISPLAY_TYPE_MAP,
   DISPLAY_TYPE_META,
-  INPUT_TYPE_LABELS,
 } from "../types/configurator";
 
 const CANVAS_SIZE = 520;
