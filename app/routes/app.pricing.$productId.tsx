@@ -120,7 +120,7 @@ function TopBar({ productName, productId }: { productName: string; productId: st
   const tabs = [
     { id: "build", label: "Build", href: `/app/configurator-setup/${enc}`, active: false, dot: false },
     { id: "pricing", label: "Pricing", href: `/app/pricing/${enc}`, active: true, dot: false },
-    { id: "variants", label: "Variants", href: `/app/pricing/${enc}`, active: false, dot: true },
+    { id: "variants", label: "Variants", href: `/app/variants/${enc}`, active: false, dot: true },
     { id: "connect", label: "Connect", href: `/app/pricing/${enc}`, active: false, dot: false },
   ];
 
@@ -157,6 +157,7 @@ function TopBar({ productName, productId }: { productName: string; productId: st
           <Link
             key={tab.id}
             to={tab.href}
+            prefetch={tab.active ? "none" : "intent"}
             style={{
               display: "inline-flex", alignItems: "center", gap: 5, padding: "0 16px",
               fontSize: 13, fontWeight: tab.active ? 600 : 400,

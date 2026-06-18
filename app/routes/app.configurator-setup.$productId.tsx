@@ -4420,8 +4420,20 @@ export default function BuilderPage() {
           >
             Build
           </button>
-          <span style={{ color: "#d1d5db", fontSize: 13, padding: "0 16px", height: 46, display: "flex", alignItems: "center", whiteSpace: "nowrap" }}>Pricing</span>
-          <span style={{ color: "#d1d5db", fontSize: 13, padding: "0 16px", height: 46, display: "flex", alignItems: "center", whiteSpace: "nowrap" }}>Variants</span>
+          <Link
+            to={`/app/pricing/${encodeURIComponent(product.id)}`}
+            prefetch="intent"
+            style={{ height: 46, padding: "0 16px", display: "flex", alignItems: "center", fontSize: 13, fontWeight: 400, color: "#6b7280", textDecoration: "none", borderBottom: "2px solid transparent", whiteSpace: "nowrap" }}
+          >
+            Pricing
+          </Link>
+          <Link
+            to={`/app/variants/${encodeURIComponent(product.id)}`}
+            prefetch="intent"
+            style={{ height: 46, padding: "0 16px", display: "flex", alignItems: "center", fontSize: 13, fontWeight: 400, color: "#6b7280", textDecoration: "none", borderBottom: "2px solid transparent", whiteSpace: "nowrap" }}
+          >
+            Variants
+          </Link>
           <div style={{ flex: 1 }} />
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <Link
