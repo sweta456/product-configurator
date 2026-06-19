@@ -1,7 +1,4 @@
-[build]
-buildCommand = "npm ci"
-
 [deploy]
-startCommand = "NODE_OPTIONS=--max-old-space-size=512 npm run build && npm run docker-start"
+startCommand = "npm run docker-start"
 restartPolicyType = "on_failure"
 restartPolicyMaxRetries = 3
