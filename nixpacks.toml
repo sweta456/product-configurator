@@ -1,0 +1,8 @@
+[phases.install]
+cmds = ["npm ci"]
+
+[phases.build]
+cmds = ["echo 'Using pre-built assets'"]
+
+[start]
+cmd = "npm run docker-start"
