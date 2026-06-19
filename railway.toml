@@ -1,0 +1,7 @@
+[build]
+buildCommand = "echo 'Using pre-built assets'"
+
+[deploy]
+startCommand = "npm run docker-start"
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 10
