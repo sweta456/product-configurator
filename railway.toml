@@ -1,7 +1,7 @@
 [build]
-buildCommand = "echo 'Using pre-built assets'"
+buildCommand = "npm ci"
 
 [deploy]
-startCommand = "npm run docker-start"
+startCommand = "NODE_OPTIONS=--max-old-space-size=1024 npm run build && npm run docker-start"
 restartPolicyType = "on_failure"
-restartPolicyMaxRetries = 10
+restartPolicyMaxRetries = 3
