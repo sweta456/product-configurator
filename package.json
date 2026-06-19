@@ -2,7 +2,7 @@
   "name": "product-configurator",
   "private": true,
   "scripts": {
-    "build": "NODE_OPTIONS=--max-old-space-size=1024 react-router build",
+    "build": "react-router build",
     "predev": "npx --yes kill-port 9293 3000",
     "dev": "shopify app dev --tunnel-url https://fragility-crinkle-bottling.ngrok-free.dev:3000",
     "tunnel": "ngrok http --domain=fragility-crinkle-bottling.ngrok-free.dev 3000",
