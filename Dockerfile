@@ -1,7 +1,7 @@
 FROM node:20-alpine
 RUN apk add --no-cache openssl
 
-EXPOSE 3000
+EXPOSE 8080
 
 WORKDIR /app
 
@@ -12,5 +12,7 @@ COPY package.json package-lock.json* ./
 RUN npm ci --omit=dev && npm cache clean --force
 
 COPY . .
+
+RUN node scripts/fix-win-paths.cjs
 
 CMD ["npm", "run", "docker-start"]
