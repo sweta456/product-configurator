@@ -2,7 +2,7 @@
 
 client_id = "70dc841cdf7d1a135a1d13f63c555d71"
 # ⬇ Replace with your production URL before running `shopify app deploy`
-application_url = "https://product-configurator-production-3eef.up.railway.app"
+application_url = "https://product-configurator-production-3eef.up.railway.app/app"
 embedded = true
 name = "Product Configurator"
 
@@ -24,9 +24,9 @@ api_version = "2026-04"
 
 [auth]
 redirect_urls = [
+  "https://product-configurator-production-3eef.up.railway.app/auth/callback",
   "https://product-configurator-production-3eef.up.railway.app/api/auth/callback"
 ]
 
 [build]
-include_config_on_deploy = true
 automatically_update_urls_on_dev = true
