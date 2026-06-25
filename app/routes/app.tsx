@@ -6,6 +6,7 @@ import { AppProvider as PolarisProvider } from "@shopify/polaris";
 import enTranslations from "@shopify/polaris/locales/en.json";
 
 import { authenticate } from "../shopify.server";
+import { ChatWidget } from "../components/ChatWidget";
 
 // Declare Shopify admin web components so TypeScript doesn't error on them
 declare global {
@@ -21,14 +22,18 @@ import React from "react";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   await authenticate.admin(request);
-  return { apiKey: process.env.SHOPIFY_API_KEY || "" };
+  return {
+    apiKey: process.env.SHOPIFY_API_KEY || "",
+    tawkPropertyId: process.env.TAWK_PROPERTY_ID || "",
+    tawkWidgetId: process.env.TAWK_WIDGET_ID || "default",
+  };
 };
 
 // apiKey never changes between navigations — skip re-running authenticate.admin on every child route change
 export const shouldRevalidate = (_args: ShouldRevalidateFunctionArgs) => false;
 
 export default function App() {
-  const { apiKey } = useLoaderData<typeof loader>();
+  const { apiKey, tawkPropertyId, tawkWidgetId } = useLoaderData<typeof loader>();
 
   return (
     <ShopifyAppProvider embedded apiKey={apiKey}>
@@ -39,6 +44,7 @@ export default function App() {
           <s-link href="/app/settings">Settings</s-link>
         </s-app-nav>
         <Outlet />
+        <ChatWidget propertyId={tawkPropertyId} widgetId={tawkWidgetId} />
       </PolarisProvider>
     </ShopifyAppProvider>
   );
