@@ -5,6 +5,7 @@ export const links = () => [
   { rel: "preconnect", href: "https://cdn.shopify.com/" },
   { rel: "stylesheet", href: "https://cdn.shopify.com/static/fonts/inter/v4/styles.css" },
   { rel: "stylesheet", href: polarisStyles },
+  { rel: "icon", type: "image/svg+xml", href: "/logo.svg" },
 ];
 
 export default function App() {
