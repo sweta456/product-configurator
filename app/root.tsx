@@ -13,6 +13,8 @@ export default function App() {
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width,initial-scale=1" />
+        <title>Konfig ‑ Product Customizer</title>
+        <meta name="description" content="Let customers personalise products with colors, text & logos. Real-time live preview canvas for Shopify stores." />
         <Meta />
         <Links />
       </head>
