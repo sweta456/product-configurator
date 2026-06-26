@@ -2,7 +2,7 @@
 
 client_id = "70dc841cdf7d1a135a1d13f63c555d71"
 # ⬇ Replace with your production URL before running `shopify app deploy`
-application_url = "https://product-configurator-production-3eef.up.railway.app/app"
+application_url = "https://product-configurator-production-3eef.up.railway.app"
 embedded = true
 name = "Konfig ‑ Product Customizer"
 
