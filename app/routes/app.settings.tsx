@@ -22,12 +22,16 @@ import { type AppSettings, DEFAULT_APP_SETTINGS } from "../types/configurator";
 // ─── Loader ───────────────────────────────────────────────────────────────────
 
 export async function loader({ request }: any) {
-  const { session } = await authenticate.admin(request);
-  const shop = session.shop;
-
-  const record = await (prisma as any).appSettings.findUnique({ where: { shop } });
-  const settings: AppSettings = { ...DEFAULT_APP_SETTINGS, ...((record?.settings as any) ?? {}) };
-  return { shop, settings };
+  try {
+    const { session } = await authenticate.admin(request);
+    const shop = session.shop;
+    const record = await (prisma as any).appSettings.findUnique({ where: { shop } });
+    const settings: AppSettings = { ...DEFAULT_APP_SETTINGS, ...((record?.settings as any) ?? {}) };
+    return { shop, settings };
+  } catch (error: any) {
+    console.error("[Settings 403 Debug] status:", error?.status, "message:", error?.message, "stack:", error?.stack);
+    throw error;
+  }
 }
 
 // ─── Action ───────────────────────────────────────────────────────────────────

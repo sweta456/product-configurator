@@ -1,5 +1,5 @@
-import { useActionData, useNavigation, useSubmit, redirect } from "react-router";
-import { useState, useCallback } from "react";
+import { useActionData, useNavigation, useSubmit, useNavigate } from "react-router";
+import { useState, useCallback, useEffect } from "react";
 import {
   Page,
   Layout,
@@ -120,7 +120,7 @@ export async function action({ request }: any) {
     }
   }
 
-  return redirect(`/app/configurator-setup/${encodeURIComponent(product.id)}`);
+  return { success: true, redirectTo: `/app/configurator-setup/${encodeURIComponent(product.id)}` };
 }
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
@@ -129,6 +129,13 @@ export default function CreateProductPage() {
   const actionData = useActionData() as any;
   const navigation = useNavigation();
   const submit = useSubmit();
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (actionData?.redirectTo) {
+      navigate(actionData.redirectTo);
+    }
+  }, [actionData, navigate]);
 
   const [title, setTitle] = useState("");
   const [price, setPrice] = useState("");
