@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 1200" width="1200" height="1200">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1200" y2="1200" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#7C3AED"/>
+      <stop offset="100%" stop-color="#1E1B4B"/>
+    </linearGradient>
+    <linearGradient id="shimmer" x1="0" y1="0" x2="0" y2="1" gradientUnits="objectBoundingBox">
+      <stop offset="0%" stop-color="white" stop-opacity="0.12"/>
+      <stop offset="100%" stop-color="white" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="8" result="blur"/>
+      <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+    </filter>
+  </defs>
+
+  <!-- Background rounded square -->
+  <rect width="1200" height="1200" rx="220" fill="url(#bg)"/>
+
+  <!-- Subtle top shimmer overlay -->
+  <rect width="1200" height="600" rx="220" fill="url(#shimmer)"/>
+
+  <!-- K — vertical stroke -->
+  <rect x="195" y="160" width="178" height="855" rx="50" fill="white"/>
+
+  <!-- K — upper arm -->
+  <polygon points="373,548 568,584 992,160 792,160" fill="white"/>
+
+  <!-- K — lower arm -->
+  <polygon points="373,636 568,584 992,1015 792,1015" fill="white"/>
+
+  <!-- Color swatch dots — represent the customization palette -->
+  <circle cx="310" cy="1108" r="52" fill="#F59E0B" filter="url(#glow)"/>
+  <circle cx="456" cy="1108" r="52" fill="#EF4444" filter="url(#glow)"/>
+  <circle cx="602" cy="1108" r="52" fill="#10B981" filter="url(#glow)"/>
+  <circle cx="748" cy="1108" r="52" fill="#3B82F6" filter="url(#glow)"/>
+</svg>
