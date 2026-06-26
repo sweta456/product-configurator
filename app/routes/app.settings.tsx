@@ -15,7 +15,6 @@ import {
   Select,
   TextField,
 } from "@shopify/polaris";
-import { SettingsIcon } from "@shopify/polaris-icons";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
 import { type AppSettings, DEFAULT_APP_SETTINGS } from "../types/configurator";
@@ -23,10 +22,8 @@ import { type AppSettings, DEFAULT_APP_SETTINGS } from "../types/configurator";
 // ─── Loader ───────────────────────────────────────────────────────────────────
 
 export async function loader({ request }: any) {
-  const { admin } = await authenticate.admin(request);
-  const shopResp = await admin.graphql(`query { shop { myshopifyDomain } }`);
-  const shopData = await shopResp.json();
-  const shop = shopData.data.shop.myshopifyDomain;
+  const { session } = await authenticate.admin(request);
+  const shop = session.shop;
 
   const record = await (prisma as any).appSettings.findUnique({ where: { shop } });
   const settings: AppSettings = { ...DEFAULT_APP_SETTINGS, ...((record?.settings as any) ?? {}) };
@@ -36,10 +33,8 @@ export async function loader({ request }: any) {
 // ─── Action ───────────────────────────────────────────────────────────────────
 
 export async function action({ request }: any) {
-  const { admin } = await authenticate.admin(request);
-  const shopResp = await admin.graphql(`query { shop { myshopifyDomain } }`);
-  const shopData = await shopResp.json();
-  const shop = shopData.data.shop.myshopifyDomain;
+  const { session } = await authenticate.admin(request);
+  const shop = session.shop;
 
   const formData = await request.formData();
   const settings: AppSettings = JSON.parse(formData.get("settings") as string);
