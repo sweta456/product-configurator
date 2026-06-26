@@ -1,4 +1,5 @@
-import type { HeadersFunction, LoaderFunctionArgs, ShouldRevalidateFunctionArgs } from "react-router";
+//import type { HeadersFunction, LoaderFunctionArgs, ShouldRevalidateFunctionArgs } from "react-router";
+import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
 import { Outlet, useLoaderData, useRouteError } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { AppProvider as ShopifyAppProvider } from "@shopify/shopify-app-react-router/react";
@@ -30,7 +31,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 };
 
 // apiKey never changes between navigations — skip re-running authenticate.admin on every child route change
-export const shouldRevalidate = (_args: ShouldRevalidateFunctionArgs) => false;
+//export const shouldRevalidate = (_args: ShouldRevalidateFunctionArgs) => false;
 
 export default function App() {
   const { apiKey, tawkPropertyId, tawkWidgetId } = useLoaderData<typeof loader>();
