@@ -20,16 +20,26 @@ import prisma from "../db.server";
 
 // ─── Action ───────────────────────────────────────────────────────────────────
 
+function is403(e: any): boolean {
+  return e?.status === 403;
+}
+
 export async function action({ request }: any) {
-  // Catch auth redirects (bounce page / OAuth) that happen when the session token
-  // is missing from the POST request. These occur when App Bridge hasn't patched
-  // window.fetch yet, or when SHOPIFY_API_KEY in Railway is wrong.
+  const url = new URL(request.url);
+  const shopFromUrl = url.searchParams.get("shop") || "";
+
   let admin: any, session: any;
   try {
     ({ admin, session } = await authenticate.admin(request));
-  } catch (e) {
+  } catch (e: any) {
     if (e instanceof Response && (e.status === 301 || e.status === 302)) {
       return { error: "Session expired — please reload the page and try again." };
+    }
+    if (is403(e)) {
+      if (shopFromUrl) {
+        try { await prisma.session.deleteMany({ where: { shop: shopFromUrl } }); } catch (_) {}
+      }
+      return { error: "Permission error (auth) — please reload this page to refresh your Shopify authorization." };
     }
     throw e;
   }
@@ -138,8 +148,8 @@ export async function action({ request }: any) {
   return { success: true, redirectTo: `/app/configurator-setup/${encodeURIComponent(product.id)}` };
 
   } catch (e: any) {
-    if (e instanceof Response && e.status === 403) {
-      // Stale offline token in DB — delete it so next page load gets fresh OAuth
+    if (is403(e)) {
+      // Stale offline token in DB — delete it so next page load forces fresh OAuth
       try { await prisma.session.deleteMany({ where: { shop: session.shop } }); } catch (_) {}
       return { error: "Permission error — Shopify rejected the request (403). Please reload this page and try again to refresh your authorization." };
     }
