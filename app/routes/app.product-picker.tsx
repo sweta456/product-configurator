@@ -1,3 +1,4 @@
+import { apiVersion } from "../shopify.server"; // add to imports
 import { useActionData, useNavigation, useSubmit, useNavigate } from "react-router";
 import { useState, useCallback, useEffect } from "react";
 import {
@@ -100,7 +101,7 @@ export async function action({ request }: any) {
     if (locationGid) {
       const numericItemId = inventoryItemId.replace("gid://shopify/InventoryItem/", "");
       const numericLocId = locationGid.replace("gid://shopify/Location/", "");
-      const baseUrl = `https://${session.shop}/admin/api/2024-01`;
+      const baseUrl = `https://${session.shop}/admin/api/${apiVersion}`;
       const restHeaders = {
         "Content-Type": "application/json",
         "X-Shopify-Access-Token": session.accessToken as string,
@@ -170,30 +171,12 @@ export default function CreateProductPage() {
     setTitleError("");
     setSubmitting(true);
     const fd = new FormData();
-    fd.set("title", title.trim());
-    fd.set("price", price || "0.00");
-    fd.set("stock", stock || "0");
-    fd.set("description", description);
+fd.set("title", title.trim());
+fd.set("price", price || "0.00");
+fd.set("stock", stock || "0");
+fd.set("description", description);
 
-    // Explicitly include the Shopify session token in the action URL so the
-    // server can authenticate without relying on App Bridge patching window.fetch.
-    let action: string | undefined;
-    try {
-      const shopify = (window as any).shopify;
-      if (typeof shopify?.idToken === "function") {
-        const idToken = await shopify.idToken();
-        const params = new URLSearchParams(window.location.search);
-        const shop = params.get("shop");
-        const host = params.get("host");
-        if (idToken && shop && host) {
-          action = `/app/product-picker?id_token=${encodeURIComponent(idToken)}&shop=${encodeURIComponent(shop)}&host=${encodeURIComponent(host)}&embedded=1`;
-        }
-      }
-    } catch {
-      // Ignore — fall back to regular submit (App Bridge will add Authorization header)
-    }
-
-    submit(fd, { method: "post", action });
+submit(fd, { method: "post" });
   }, [title, price, stock, description, submit]);
 
   return (

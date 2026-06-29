@@ -1,3 +1,4 @@
+import { apiVersion } from "../shopify.server";
 import { useLoaderData, Link, useFetcher, useNavigate } from "react-router";
 import { useState, useCallback } from "react";
 import {
@@ -181,7 +182,7 @@ export async function action({ request }: any) {
       untrackedItems.map((item: any) => {
         const numericItemId = (item.id as string).replace("gid://shopify/InventoryItem/", "");
         return fetch(
-          `https://${session.shop}/admin/api/2024-01/inventory_items/${numericItemId}.json`,
+          `https://${session.shop}/admin/api/${apiVersion}/inventory_items/${numericItemId}.json`,
           {
             method: "PUT",
             headers: {
@@ -199,7 +200,7 @@ export async function action({ request }: any) {
 
   const numericId = productId.replace("gid://shopify/Product/", "");
   await fetch(
-    `https://${session.shop}/admin/api/2024-01/products/${numericId}.json`,
+    `https://${session.shop}/admin/api/${apiVersion}/products/${numericId}.json`,
     {
       method: "PUT",
       headers: {
