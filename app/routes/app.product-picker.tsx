@@ -163,7 +163,7 @@ export default function CreateProductPage() {
     <Page
       title="New Product"
       subtitle="Create a product in your Shopify store to start building a configurator"
-      backAction={{ content: "Products", url: "/app/products" }}
+      backAction={{ content: "Products", onAction: () => navigate("/app/products") }}
     >
       <Layout>
         <Layout.Section>

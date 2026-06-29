@@ -1,4 +1,4 @@
-import { useLoaderData, useSubmit, useActionData, Link } from "react-router";
+import { useLoaderData, useSubmit, useActionData, Link, useNavigate } from "react-router";
 import { useState, useCallback } from "react";
 import {
   Page,
@@ -61,6 +61,7 @@ export default function ConfiguratorStylePage() {
   const { productId, productName, style: initStyle } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const submit = useSubmit();
+  const navigate = useNavigate();
 
   const [style, setStyle] = useState<ConfiguratorStyle>(initStyle);
   const update = useCallback((patch: Partial<ConfiguratorStyle>) => setStyle((s) => ({ ...s, ...patch })), []);
@@ -75,12 +76,12 @@ export default function ConfiguratorStylePage() {
     <Page
       title="Configurator Style"
       subtitle={productName}
-      backAction={{ content: "Setup", url: `/app/configurator-setup/${encodeURIComponent(productId)}` }}
+      backAction={{ content: "Setup", onAction: () => navigate(`/app/configurator-setup/${encodeURIComponent(productId)}`) }}
       primaryAction={<Button variant="primary" onClick={handleSave}>Save Style</Button>}
       secondaryActions={[
         {
           content: "Preview",
-          url: `/app/configurator/${encodeURIComponent(productId)}`,
+          onAction: () => navigate(`/app/configurator/${encodeURIComponent(productId)}`),
         },
       ]}
     >
