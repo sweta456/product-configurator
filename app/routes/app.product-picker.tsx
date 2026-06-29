@@ -15,6 +15,7 @@ import {
   Divider,
 } from "@shopify/polaris";
 import { authenticate } from "../shopify.server";
+import prisma from "../db.server";
 
 // ─── Action ───────────────────────────────────────────────────────────────────
 
@@ -39,6 +40,8 @@ export async function action({ request }: any) {
   const stock = parseInt((formData.get("stock") as string)?.trim() || "0", 10);
 
   if (!title) return { error: "Product name is required." };
+
+  try {
 
   // Create product as DRAFT — not publicly visible until explicitly published
   const createResp = await admin.graphql(
@@ -132,6 +135,16 @@ export async function action({ request }: any) {
   }
 
   return { success: true, redirectTo: `/app/configurator-setup/${encodeURIComponent(product.id)}` };
+
+  } catch (e: any) {
+    if (e instanceof Response && e.status === 403) {
+      // Stale offline token in DB — delete it so next page load gets fresh OAuth
+      try { await prisma.session.deleteMany({ where: { shop: session.shop } }); } catch (_) {}
+      return { error: "Permission error — Shopify rejected the request (403). Please reload this page and try again to refresh your authorization." };
+    }
+    if (e instanceof Response) throw e;
+    return { error: String(e?.message ?? "An unexpected error occurred. Please try again.") };
+  }
 }
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
