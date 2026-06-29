@@ -34,10 +34,12 @@ const shopify = shopifyApp({
   authPathPrefix: "/auth",
   sessionStorage: new PrismaSessionStorage(prisma),
   distribution: AppDistribution.AppStore,
-  future: {},
+  future: {
+    expiringOfflineAccessTokens: true
+  },
   ...process.env.SHOP_CUSTOM_DOMAIN ? { customShopDomains: [process.env.SHOP_CUSTOM_DOMAIN] } : {}
 });
-ApiVersion.October25;
+const apiVersion = ApiVersion.October25;
 const addDocumentResponseHeaders = shopify.addDocumentResponseHeaders;
 const authenticate = shopify.authenticate;
 shopify.unauthenticated;
@@ -22364,10 +22366,15 @@ const route18 = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.definePrope
   default: app_pricing_$productId,
   loader: loader$2
 }, Symbol.toStringTag, { value: "Module" }));
+function is403(e) {
+  return (e == null ? void 0 : e.status) === 403;
+}
 async function action$4({
   request
 }) {
   var _a2, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u, _v;
+  const url = new URL(request.url);
+  const shopFromUrl = url.searchParams.get("shop") || "";
   let admin, session;
   try {
     ({
@@ -22380,6 +22387,21 @@ async function action$4({
         error: "Session expired — please reload the page and try again."
       };
     }
+    if (is403(e)) {
+      if (shopFromUrl) {
+        try {
+          await prisma.session.deleteMany({
+            where: {
+              shop: shopFromUrl
+            }
+          });
+        } catch (_) {
+        }
+      }
+      return {
+        error: "Permission error (auth) — please reload this page to refresh your Shopify authorization."
+      };
+    }
     throw e;
   }
   const formData = await request.formData();
@@ -22390,7 +22412,8 @@ async function action$4({
   if (!title) return {
     error: "Product name is required."
   };
-  const createResp = await admin.graphql(`mutation ProductCreate($input: ProductInput!) {
+  try {
+    const createResp = await admin.graphql(`mutation ProductCreate($input: ProductInput!) {
       productCreate(input: $input) {
         product {
           id title handle
@@ -22401,79 +22424,98 @@ async function action$4({
         userErrors { field message }
       }
     }`, {
-    variables: {
-      input: {
-        title,
-        descriptionHtml: description,
-        status: "DRAFT"
+      variables: {
+        input: {
+          title,
+          descriptionHtml: description,
+          status: "DRAFT"
+        }
       }
-    }
-  });
-  const createData = await createResp.json();
-  const errs = ((_f = (_e = createData.data) == null ? void 0 : _e.productCreate) == null ? void 0 : _f.userErrors) ?? [];
-  if (errs.length > 0) return {
-    error: errs[0].message
-  };
-  const product = (_h = (_g = createData.data) == null ? void 0 : _g.productCreate) == null ? void 0 : _h.product;
-  if (!product) return {
-    error: "Failed to create product. Please try again."
-  };
-  const variantId = (_l = (_k = (_j = (_i = product.variants) == null ? void 0 : _i.edges) == null ? void 0 : _j[0]) == null ? void 0 : _k.node) == null ? void 0 : _l.id;
-  const inventoryItemId = (_q = (_p = (_o = (_n = (_m = product.variants) == null ? void 0 : _m.edges) == null ? void 0 : _n[0]) == null ? void 0 : _o.node) == null ? void 0 : _p.inventoryItem) == null ? void 0 : _q.id;
-  if (variantId && parseFloat(price) > 0) {
-    await admin.graphql(`mutation VariantsBulkUpdate($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
+    });
+    const createData = await createResp.json();
+    const errs = ((_f = (_e = createData.data) == null ? void 0 : _e.productCreate) == null ? void 0 : _f.userErrors) ?? [];
+    if (errs.length > 0) return {
+      error: errs[0].message
+    };
+    const product = (_h = (_g = createData.data) == null ? void 0 : _g.productCreate) == null ? void 0 : _h.product;
+    if (!product) return {
+      error: "Failed to create product. Please try again."
+    };
+    const variantId = (_l = (_k = (_j = (_i = product.variants) == null ? void 0 : _i.edges) == null ? void 0 : _j[0]) == null ? void 0 : _k.node) == null ? void 0 : _l.id;
+    const inventoryItemId = (_q = (_p = (_o = (_n = (_m = product.variants) == null ? void 0 : _m.edges) == null ? void 0 : _n[0]) == null ? void 0 : _o.node) == null ? void 0 : _p.inventoryItem) == null ? void 0 : _q.id;
+    if (variantId && parseFloat(price) > 0) {
+      await admin.graphql(`mutation VariantsBulkUpdate($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
         productVariantsBulkUpdate(productId: $productId, variants: $variants) {
           userErrors { field message }
         }
       }`, {
-      variables: {
-        productId: product.id,
-        variants: [{
-          id: variantId,
-          price
-        }]
-      }
-    });
-  }
-  if (inventoryItemId) {
-    const locResp = await admin.graphql(`query { locations(first: 1) { edges { node { id } } } }`);
-    const locData = await locResp.json();
-    const locationGid = ((_v = (_u = (_t = (_s = (_r = locData.data) == null ? void 0 : _r.locations) == null ? void 0 : _s.edges) == null ? void 0 : _t[0]) == null ? void 0 : _u.node) == null ? void 0 : _v.id) ?? "";
-    if (locationGid) {
-      const numericItemId = inventoryItemId.replace("gid://shopify/InventoryItem/", "");
-      const numericLocId = locationGid.replace("gid://shopify/Location/", "");
-      const baseUrl = `https://${session.shop}/admin/api/2024-01`;
-      const restHeaders = {
-        "Content-Type": "application/json",
-        "X-Shopify-Access-Token": session.accessToken
-      };
-      await fetch(`${baseUrl}/inventory_items/${numericItemId}.json`, {
-        method: "PUT",
-        headers: restHeaders,
-        body: JSON.stringify({
-          inventory_item: {
-            id: parseInt(numericItemId, 10),
-            tracked: true
-          }
-        })
+        variables: {
+          productId: product.id,
+          variants: [{
+            id: variantId,
+            price
+          }]
+        }
       });
-      if (stock > 0) {
-        await fetch(`${baseUrl}/inventory_levels/set.json`, {
-          method: "POST",
+    }
+    if (inventoryItemId) {
+      const locResp = await admin.graphql(`query { locations(first: 1) { edges { node { id } } } }`);
+      const locData = await locResp.json();
+      const locationGid = ((_v = (_u = (_t = (_s = (_r = locData.data) == null ? void 0 : _r.locations) == null ? void 0 : _s.edges) == null ? void 0 : _t[0]) == null ? void 0 : _u.node) == null ? void 0 : _v.id) ?? "";
+      if (locationGid) {
+        const numericItemId = inventoryItemId.replace("gid://shopify/InventoryItem/", "");
+        const numericLocId = locationGid.replace("gid://shopify/Location/", "");
+        const baseUrl = `https://${session.shop}/admin/api/2024-01`;
+        const restHeaders = {
+          "Content-Type": "application/json",
+          "X-Shopify-Access-Token": session.accessToken
+        };
+        await fetch(`${baseUrl}/inventory_items/${numericItemId}.json`, {
+          method: "PUT",
           headers: restHeaders,
           body: JSON.stringify({
-            location_id: parseInt(numericLocId, 10),
-            inventory_item_id: parseInt(numericItemId, 10),
-            available: stock
+            inventory_item: {
+              id: parseInt(numericItemId, 10),
+              tracked: true
+            }
           })
         });
+        if (stock > 0) {
+          await fetch(`${baseUrl}/inventory_levels/set.json`, {
+            method: "POST",
+            headers: restHeaders,
+            body: JSON.stringify({
+              location_id: parseInt(numericLocId, 10),
+              inventory_item_id: parseInt(numericItemId, 10),
+              available: stock
+            })
+          });
+        }
       }
     }
+    return {
+      success: true,
+      redirectTo: `/app/configurator-setup/${encodeURIComponent(product.id)}`
+    };
+  } catch (e) {
+    if (is403(e)) {
+      try {
+        await prisma.session.deleteMany({
+          where: {
+            shop: session.shop
+          }
+        });
+      } catch (_) {
+      }
+      return {
+        error: "Permission error — Shopify rejected the request (403). Please reload this page and try again to refresh your authorization."
+      };
+    }
+    if (e instanceof Response) throw e;
+    return {
+      error: String((e == null ? void 0 : e.message) ?? "An unexpected error occurred. Please try again.")
+    };
   }
-  return {
-    success: true,
-    redirectTo: `/app/configurator-setup/${encodeURIComponent(product.id)}`
-  };
 }
 const app_productPicker = UNSAFE_withComponentProps(function CreateProductPage() {
   const actionData = useActionData();
@@ -22983,7 +23025,7 @@ async function action$1({
     const untrackedItems = variants.map((e) => e.node.inventoryItem).filter((item) => item && !item.tracked);
     await Promise.all(untrackedItems.map((item) => {
       const numericItemId = item.id.replace("gid://shopify/InventoryItem/", "");
-      return fetch(`https://${session.shop}/admin/api/2024-01/inventory_items/${numericItemId}.json`, {
+      return fetch(`https://${session.shop}/admin/api/${apiVersion}/inventory_items/${numericItemId}.json`, {
         method: "PUT",
         headers: {
           "Content-Type": "application/json",
@@ -22999,7 +23041,7 @@ async function action$1({
     }));
   }
   const numericId = productId.replace("gid://shopify/Product/", "");
-  await fetch(`https://${session.shop}/admin/api/2024-01/products/${numericId}.json`, {
+  await fetch(`https://${session.shop}/admin/api/${apiVersion}/products/${numericId}.json`, {
     method: "PUT",
     headers: {
       "Content-Type": "application/json",
