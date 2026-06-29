@@ -223,6 +223,7 @@ export async function action({ request }: any) {
 export default function ProductsPage() {
   const { products } = useLoaderData() as any;
   const bulkFetcher = useFetcher<any>();
+  const navigate = useNavigate();
 
   const resourceItems = products.map((p: any) => ({ ...p, id: p.productId }));
   const { selectedResources, allResourcesSelected, handleSelectionChange } =
@@ -266,11 +267,11 @@ export default function ProductsPage() {
                 heading="No products configured yet"
                 action={{
                   content: "Add your first product",
-                  url: "/app/product-picker",
+                  onAction: () => navigate("/app/product-picker"),
                 }}
                 secondaryAction={{
                   content: "Learn more",
-                  url: "/app",
+                  onAction: () => navigate("/app"),
                 }}
                 image="https://cdn.shopify.com/s/files/1/0262/4071/2726/files/emptystate-files.png"
               >
