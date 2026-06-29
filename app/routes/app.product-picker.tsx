@@ -19,7 +19,18 @@ import { authenticate } from "../shopify.server";
 // ─── Action ───────────────────────────────────────────────────────────────────
 
 export async function action({ request }: any) {
-  const { admin, session } = await authenticate.admin(request);
+  // Catch auth redirects (bounce page / OAuth) that happen when the session token
+  // is missing from the POST request. These occur when App Bridge hasn't patched
+  // window.fetch yet, or when SHOPIFY_API_KEY in Railway is wrong.
+  let admin: any, session: any;
+  try {
+    ({ admin, session } = await authenticate.admin(request));
+  } catch (e) {
+    if (e instanceof Response && (e.status === 301 || e.status === 302)) {
+      return { error: "Session expired — please reload the page and try again." };
+    }
+    throw e;
+  }
   const formData = await request.formData();
 
   const title = (formData.get("title") as string)?.trim();
@@ -142,21 +153,47 @@ export default function CreateProductPage() {
   const [stock, setStock] = useState("100");
   const [description, setDescription] = useState("");
   const [titleError, setTitleError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
-  const saving = navigation.state !== "idle";
+  const saving = navigation.state !== "idle" || submitting;
 
-  const handleSubmit = useCallback(() => {
+  // Reset submitting if navigation resolves or action returns an error
+  useEffect(() => {
+    if (navigation.state === "idle") setSubmitting(false);
+  }, [navigation.state]);
+
+  const handleSubmit = useCallback(async () => {
     if (!title.trim()) {
       setTitleError("Product name is required.");
       return;
     }
     setTitleError("");
+    setSubmitting(true);
     const fd = new FormData();
     fd.set("title", title.trim());
     fd.set("price", price || "0.00");
     fd.set("stock", stock || "0");
     fd.set("description", description);
-    submit(fd, { method: "post" });
+
+    // Explicitly include the Shopify session token in the action URL so the
+    // server can authenticate without relying on App Bridge patching window.fetch.
+    let action: string | undefined;
+    try {
+      const shopify = (window as any).shopify;
+      if (typeof shopify?.idToken === "function") {
+        const idToken = await shopify.idToken();
+        const params = new URLSearchParams(window.location.search);
+        const shop = params.get("shop");
+        const host = params.get("host");
+        if (idToken && shop && host) {
+          action = `/app/product-picker?id_token=${encodeURIComponent(idToken)}&shop=${encodeURIComponent(shop)}&host=${encodeURIComponent(host)}&embedded=1`;
+        }
+      }
+    } catch {
+      // Ignore — fall back to regular submit (App Bridge will add Authorization header)
+    }
+
+    submit(fd, { method: "post", action });
   }, [title, price, stock, description, submit]);
 
   return (
