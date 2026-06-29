@@ -5,7 +5,6 @@ client_id = "70dc841cdf7d1a135a1d13f63c555d71"
 application_url = "https://product-configurator-production-3eef.up.railway.app"
 embedded = true
 name = "Konfig ‑ Product Customizer"
-icon = "public/icon.png"
 
 [access_scopes]
 scopes = "write_products,read_products,write_orders,read_orders,read_inventory,write_inventory,read_locations"
