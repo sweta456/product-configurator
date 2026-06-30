@@ -15,11 +15,33 @@ import {
   Divider,
 } from "@shopify/polaris";
 import { authenticate } from "../shopify.server";
+import prisma from "../db.server";
 
 // ─── Action ───────────────────────────────────────────────────────────────────
 
+function is403(e: any): boolean {
+  return e?.status === 403;
+}
+
 export async function action({ request }: any) {
-  const { admin, session } = await authenticate.admin(request);
+  const url = new URL(request.url);
+  const shopFromUrl = url.searchParams.get("shop") || "";
+
+  let admin: any, session: any;
+  try {
+    ({ admin, session } = await authenticate.admin(request));
+  } catch (e: any) {
+    if (e instanceof Response && (e.status === 301 || e.status === 302)) {
+      return { error: "Session expired — please reload the page and try again." };
+    }
+    if (is403(e)) {
+      if (shopFromUrl) {
+        try { await prisma.session.deleteMany({ where: { shop: shopFromUrl } }); } catch (_) {}
+      }
+      return { error: "Permission error (auth) — please reload this page to refresh your Shopify authorization." };
+    }
+    throw e;
+  }
   const formData = await request.formData();
 
   const title = (formData.get("title") as string)?.trim();
@@ -28,6 +50,8 @@ export async function action({ request }: any) {
   const stock = parseInt((formData.get("stock") as string)?.trim() || "0", 10);
 
   if (!title) return { error: "Product name is required." };
+
+  try {
 
   // Create product as DRAFT — not publicly visible until explicitly published
   const createResp = await admin.graphql(
@@ -121,6 +145,16 @@ export async function action({ request }: any) {
   }
 
   return { success: true, redirectTo: `/app/configurator-setup/${encodeURIComponent(product.id)}` };
+
+  } catch (e: any) {
+    if (is403(e)) {
+      // Stale offline token in DB — delete it so next page load forces fresh OAuth
+      try { await prisma.session.deleteMany({ where: { shop: session.shop } }); } catch (_) {}
+      return { error: "Permission error — Shopify rejected the request (403). Please reload this page and try again to refresh your authorization." };
+    }
+    if (e instanceof Response) throw e;
+    return { error: String(e?.message ?? "An unexpected error occurred. Please try again.") };
+  }
 }
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
@@ -142,28 +176,54 @@ export default function CreateProductPage() {
   const [stock, setStock] = useState("100");
   const [description, setDescription] = useState("");
   const [titleError, setTitleError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
-  const saving = navigation.state !== "idle";
+  const saving = navigation.state !== "idle" || submitting;
 
-  const handleSubmit = useCallback(() => {
+  // Reset submitting if navigation resolves or action returns an error
+  useEffect(() => {
+    if (navigation.state === "idle") setSubmitting(false);
+  }, [navigation.state]);
+
+  const handleSubmit = useCallback(async () => {
     if (!title.trim()) {
       setTitleError("Product name is required.");
       return;
     }
     setTitleError("");
+    setSubmitting(true);
     const fd = new FormData();
     fd.set("title", title.trim());
     fd.set("price", price || "0.00");
     fd.set("stock", stock || "0");
     fd.set("description", description);
-    submit(fd, { method: "post" });
+
+    // Explicitly include the Shopify session token in the action URL so the
+    // server can authenticate without relying on App Bridge patching window.fetch.
+    let action: string | undefined;
+    try {
+      const shopify = (window as any).shopify;
+      if (typeof shopify?.idToken === "function") {
+        const idToken = await shopify.idToken();
+        const params = new URLSearchParams(window.location.search);
+        const shop = params.get("shop");
+        const host = params.get("host");
+        if (idToken && shop && host) {
+          action = `/app/product-picker?id_token=${encodeURIComponent(idToken)}&shop=${encodeURIComponent(shop)}&host=${encodeURIComponent(host)}&embedded=1`;
+        }
+      }
+    } catch {
+      // Ignore — fall back to regular submit (App Bridge will add Authorization header)
+    }
+
+    submit(fd, { method: "post", action });
   }, [title, price, stock, description, submit]);
 
   return (
     <Page
       title="New Product"
       subtitle="Create a product in your Shopify store to start building a configurator"
-      backAction={{ content: "Products", url: "/app/products" }}
+      backAction={{ content: "Products", onAction: () => navigate("/app/products") }}
     >
       <Layout>
         <Layout.Section>
