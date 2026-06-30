@@ -198,26 +198,44 @@ export async function action({ request }: any) {
     );
   }
 
-  // Control Online Store visibility via REST published boolean.
-  // Only requires write_products scope (already granted).
-  const numericId = productId.replace("gid://shopify/Product/", "");
-  const pubResp = await fetch(
-    `https://${session.shop}/admin/api/2024-01/products/${numericId}.json`,
-    {
-      method: "PUT",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Shopify-Access-Token": session.accessToken as string,
-      },
-      body: JSON.stringify({
-        product: { id: numericId, published: newStatus === "ACTIVE" },
-      }),
-    },
-  );
-  if (!pubResp.ok) {
-    const body = await pubResp.json().catch(() => ({}));
-    return { error: `Publish failed: ${JSON.stringify((body as any)?.errors ?? pubResp.status)}` };
+  // Publish / unpublish on the Online Store channel via publishablePublish.
+  // Requires write_publications + read_publications scopes.
+  const pubsResp = await admin.graphql(`
+    query {
+      publications(first: 20) {
+        edges { node { id name } }
+      }
+    }
+  `);
+  const pubsData = await pubsResp.json();
+  const onlineStorePub = (pubsData.data?.publications?.edges ?? []).find(
+    (e: any) => (e.node.name as string).toLowerCase().includes("online store"),
+  )?.node as { id: string } | undefined;
+
+  if (!onlineStorePub) {
+    return { error: "Online Store channel not found. Please re-open the app to grant publication permissions, then try again." };
   }
+
+  const mutation = newStatus === "ACTIVE"
+    ? `mutation Pub($id: ID!, $input: [PublicationInput!]!) {
+        publishablePublish(id: $id, input: $input) {
+          publishable { ... on Product { id } }
+          userErrors { field message }
+        }
+      }`
+    : `mutation Pub($id: ID!, $input: [PublicationInput!]!) {
+        publishableUnpublish(id: $id, input: $input) {
+          publishable { ... on Product { id } }
+          userErrors { field message }
+        }
+      }`;
+
+  const pubResp = await admin.graphql(mutation, {
+    variables: { id: productId, input: [{ publicationId: onlineStorePub.id }] },
+  });
+  const pubData = await pubResp.json();
+  const pubErrors = (pubData.data?.publishablePublish ?? pubData.data?.publishableUnpublish)?.userErrors ?? [];
+  if (pubErrors.length > 0) return { error: pubErrors[0].message };
 
   return { success: true, productId, status: newStatus };
 }
