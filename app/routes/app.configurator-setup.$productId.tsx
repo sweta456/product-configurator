@@ -80,6 +80,45 @@ export async function action({ request, params }: any) {
       }`,
       { variables: { id: decodedId, status: newStatus } },
     );
+
+    // Publish or unpublish across all sales channels
+    const pubResp = await admin.graphql(
+      `query GetPublications {
+        publications(first: 20) {
+          edges { node { id name } }
+        }
+      }`,
+    );
+    const pubData = await pubResp.json();
+    const SALES_CHANNELS = ["Online Store", "Shop", "Point of Sale"];
+    const pubIds: { publicationId: string }[] = (
+      pubData.data?.publications?.edges ?? []
+    )
+      .filter((e: any) => SALES_CHANNELS.includes(e.node.name))
+      .map((e: any) => ({ publicationId: e.node.id }));
+
+    if (pubIds.length > 0) {
+      if (newStatus === "ACTIVE") {
+        await admin.graphql(
+          `mutation PublishProduct($id: ID!, $input: [PublicationInput!]!) {
+            publishablePublish(id: $id, input: $input) {
+              userErrors { field message }
+            }
+          }`,
+          { variables: { id: decodedId, input: pubIds } },
+        );
+      } else {
+        await admin.graphql(
+          `mutation UnpublishProduct($id: ID!, $input: [PublicationInput!]!) {
+            publishableUnpublish(id: $id, input: $input) {
+              userErrors { field message }
+            }
+          }`,
+          { variables: { id: decodedId, input: pubIds } },
+        );
+      }
+    }
+
     return { statusUpdated: true, status: newStatus };
   }
 
