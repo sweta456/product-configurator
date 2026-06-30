@@ -198,9 +198,12 @@ export async function action({ request }: any) {
     );
   }
 
+  // Publish/unpublish to Online Store via REST 2024-01.
+  // The 2024-01 endpoint still supports published_at for channel publication.
+  // The newer 2025-10 endpoint dropped this behaviour, which is why we pin 2024-01 here.
   const numericId = productId.replace("gid://shopify/Product/", "");
-  await fetch(
-    `https://${session.shop}/admin/api/${apiVersion}/products/${numericId}.json`,
+  const pubRestResp = await fetch(
+    `https://${session.shop}/admin/api/2024-01/products/${numericId}.json`,
     {
       method: "PUT",
       headers: {
@@ -213,8 +216,13 @@ export async function action({ request }: any) {
           published_at: newStatus === "ACTIVE" ? new Date().toISOString() : null,
         },
       }),
-    }
+    },
   );
+  if (!pubRestResp.ok) {
+    const body = await pubRestResp.json().catch(() => ({}));
+    const msg = (body as any)?.errors ?? `HTTP ${pubRestResp.status}`;
+    return { error: `Publish failed: ${JSON.stringify(msg)}` };
+  }
 
   return { success: true, productId, status: newStatus };
 }
@@ -324,6 +332,7 @@ function ProductRow({ item, index, selected }: { item: any; index: number; selec
   const firstLayerSrc = Array.isArray(layers) && layers.length > 0 ? (layers as LayerConfig[])[0]?.src : null;
   const thumbSrc = shopify?.featuredImage?.url || firstLayerSrc;
   const saving = fetcher.state !== "idle";
+  const rowError = fetcher.data?.error as string | undefined;
 
   const menuActivator = (
     <Button
@@ -375,6 +384,9 @@ function ProductRow({ item, index, selected }: { item: any; index: number; selec
                 </Button>
               )}
             </InlineStack>
+            {rowError && (
+              <Text variant="bodySm" tone="critical" as="p">{rowError}</Text>
+            )}
           </fetcher.Form>
         </div>
       </IndexTable.Cell>
