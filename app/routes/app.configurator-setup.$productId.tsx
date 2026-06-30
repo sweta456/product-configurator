@@ -63,7 +63,7 @@ export async function loader({ request, params }: any) {
 }
 
 export async function action({ request, params }: any) {
-  const { admin } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
   const decodedId = decodeURIComponent(params.productId);
   const formData = await request.formData();
 
@@ -71,6 +71,9 @@ export async function action({ request, params }: any) {
 
   if (intent === "updateProductStatus") {
     const newStatus = formData.get("status") as string;
+    const numericId = decodedId.replace("gid://shopify/Product/", "");
+
+    // Step 1 — set Shopify product status (ACTIVE / DRAFT)
     await admin.graphql(
       `mutation UpdateProductStatus($id: ID!, $status: ProductStatus!) {
         productUpdate(input: { id: $id, status: $status }) {
@@ -81,42 +84,29 @@ export async function action({ request, params }: any) {
       { variables: { id: decodedId, status: newStatus } },
     );
 
-    // Publish or unpublish across all sales channels
-    const pubResp = await admin.graphql(
-      `query GetPublications {
-        publications(first: 20) {
-          edges { node { id name } }
-        }
-      }`,
+    // Step 2 — publish / unpublish on Online Store via REST published boolean.
+    // Uses write_products scope only — no write_publications needed.
+    const pubResp = await fetch(
+      `https://${session.shop}/admin/api/2024-01/products/${numericId}.json`,
+      {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Shopify-Access-Token": session.accessToken as string,
+        },
+        body: JSON.stringify({
+          product: { id: numericId, published: newStatus === "ACTIVE" },
+        }),
+      },
     );
-    const pubData = await pubResp.json();
-    const SALES_CHANNELS = ["Online Store", "Shop", "Point of Sale"];
-    const pubIds: { publicationId: string }[] = (
-      pubData.data?.publications?.edges ?? []
-    )
-      .filter((e: any) => SALES_CHANNELS.includes(e.node.name))
-      .map((e: any) => ({ publicationId: e.node.id }));
 
-    if (pubIds.length > 0) {
-      if (newStatus === "ACTIVE") {
-        await admin.graphql(
-          `mutation PublishProduct($id: ID!, $input: [PublicationInput!]!) {
-            publishablePublish(id: $id, input: $input) {
-              userErrors { field message }
-            }
-          }`,
-          { variables: { id: decodedId, input: pubIds } },
-        );
-      } else {
-        await admin.graphql(
-          `mutation UnpublishProduct($id: ID!, $input: [PublicationInput!]!) {
-            publishableUnpublish(id: $id, input: $input) {
-              userErrors { field message }
-            }
-          }`,
-          { variables: { id: decodedId, input: pubIds } },
-        );
-      }
+    if (!pubResp.ok) {
+      const body = await pubResp.json().catch(() => ({}));
+      return {
+        statusUpdated: true,
+        status: newStatus,
+        publishError: `Could not update Online Store visibility: ${JSON.stringify((body as any)?.errors ?? pubResp.status)}`,
+      };
     }
 
     return { statusUpdated: true, status: newStatus };
@@ -3626,7 +3616,7 @@ export default function BuilderPage() {
   const [customTitle, setCustomTitle] = useState<string>(product.title ?? "");
   const [productStatus, setProductStatus] = useState<string>(product.status ?? "DRAFT");
   const [showStatusMenu, setShowStatusMenu] = useState(false);
-  const statusFetcher = useFetcher<{ statusUpdated?: boolean; status?: string }>();
+  const statusFetcher = useFetcher<{ statusUpdated?: boolean; status?: string; publishError?: string }>();
   const [canvasW, setCanvasW] = useState<number>((existingOptions?.canvasW as number) ?? CANVAS_SIZE);
   const [canvasH, setCanvasH] = useState<number>((existingOptions?.canvasH as number) ?? CANVAS_SIZE);
 
@@ -4175,6 +4165,13 @@ export default function BuilderPage() {
             )}
           </div>
         </div>
+
+        {/* Publish error */}
+        {statusFetcher.data?.publishError && (
+          <div style={{ padding: "6px 12px", background: "#fef2f2", borderBottom: "1px solid #fecaca", fontSize: 11, color: "#b91c1c" }}>
+            {statusFetcher.data.publishError}
+          </div>
+        )}
 
         {/* ── Row 2: product image + name ── */}
         <div style={{ padding: "10px 12px", borderBottom: "1px solid #e5e7eb", display: "flex", alignItems: "center", gap: 10 }}>
