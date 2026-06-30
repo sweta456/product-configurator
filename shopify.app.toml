@@ -7,7 +7,7 @@ embedded = true
 name = "Konfig ‑ Product Customizer"
 
 [access_scopes]
-scopes = "write_products,read_products,write_orders,read_orders,read_inventory,write_inventory,read_locations"
+scopes = "write_products,read_products,write_orders,read_orders,read_inventory,write_inventory,read_locations,write_publications,read_publications"
 optional_scopes = [ ]
 use_legacy_install_flow = false
 
