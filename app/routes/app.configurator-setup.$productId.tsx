@@ -63,83 +63,12 @@ export async function loader({ request, params }: any) {
 }
 
 export async function action({ request, params }: any) {
-  const { admin, session } = await authenticate.admin(request);
+  const { admin } = await authenticate.admin(request);
   const decodedId = decodeURIComponent(params.productId);
   const formData = await request.formData();
 
   const intent = formData.get("intent") as string | null;
 
-  if (intent === "updateProductStatus") {
-    const newStatus = formData.get("status") as string;
-
-    // Step 1 — set Shopify product status (ACTIVE / DRAFT)
-    await admin.graphql(
-      `mutation UpdateProductStatus($id: ID!, $status: ProductStatus!) {
-        productUpdate(input: { id: $id, status: $status }) {
-          product { id status }
-          userErrors { field message }
-        }
-      }`,
-      { variables: { id: decodedId, status: newStatus } },
-    );
-
-    // Step 2 — publish / unpublish on Online Store channel via publishablePublish.
-    // Requires write_publications + read_publications scopes.
-    const pubsResp = await admin.graphql(`
-      query {
-        publications(first: 20) {
-          edges { node { id name } }
-        }
-      }
-    `);
-    const pubsData = await pubsResp.json();
-    const onlineStorePub = (pubsData.data?.publications?.edges ?? []).find(
-      (e: any) => (e.node.name as string).toLowerCase().includes("online store"),
-    )?.node as { id: string } | undefined;
-
-    if (!onlineStorePub) {
-      const grantedScopes = session.scope ?? "(none)";
-      const hasPubScope = grantedScopes.includes("write_publications");
-      return {
-        statusUpdated: true,
-        status: newStatus,
-        publishError: hasPubScope
-          ? `Online Store publication not found in response. Raw: ${JSON.stringify(pubsData.data?.publications)}`
-          : `Missing write_publications scope. Granted scopes: ${grantedScopes}. → Run 'shopify app deploy' then delete the session and reopen the app.`,
-      };
-    }
-
-    const mutation = newStatus === "ACTIVE"
-      ? `mutation Pub($id: ID!, $input: [PublicationInput!]!) {
-          publishablePublish(id: $id, input: $input) {
-            publishable { ... on Product { id } }
-            userErrors { field message }
-          }
-        }`
-      : `mutation Pub($id: ID!, $input: [PublicationInput!]!) {
-          publishableUnpublish(id: $id, input: $input) {
-            publishable { ... on Product { id } }
-            userErrors { field message }
-          }
-        }`;
-
-    const pubResp = await admin.graphql(mutation, {
-      variables: { id: decodedId, input: [{ publicationId: onlineStorePub.id }] },
-    });
-    const pubData = await pubResp.json();
-
-    // Top-level GraphQL errors (e.g. scope denied at Partners Dashboard level)
-    if (pubData.errors?.length > 0) {
-      return { statusUpdated: true, status: newStatus, publishError: `GraphQL error: ${pubData.errors[0].message}` };
-    }
-
-    const pubErrors = (pubData.data?.publishablePublish ?? pubData.data?.publishableUnpublish)?.userErrors ?? [];
-    if (pubErrors.length > 0) {
-      return { statusUpdated: true, status: newStatus, publishError: pubErrors[0].message };
-    }
-
-    return { statusUpdated: true, status: newStatus, publishInfo: `Published to: ${onlineStorePub.id}` };
-  }
 
   const layers = JSON.parse(formData.get("layers") as string);
   const questions = JSON.parse(formData.get("questions") as string);
@@ -3643,9 +3572,6 @@ export default function BuilderPage() {
   const [modelMode, setModelMode] = useState<boolean>((existingOptions?.modelMode as boolean) ?? false);
   const [glbUrl, setGlbUrl] = useState<string | undefined>(existingOptions?.glbUrl as string | undefined);
   const [customTitle, setCustomTitle] = useState<string>(product.title ?? "");
-  const [productStatus, setProductStatus] = useState<string>(product.status ?? "DRAFT");
-  const [showStatusMenu, setShowStatusMenu] = useState(false);
-  const statusFetcher = useFetcher<{ statusUpdated?: boolean; status?: string; publishError?: string; publishInfo?: string }>();
   const [canvasW, setCanvasW] = useState<number>((existingOptions?.canvasW as number) ?? CANVAS_SIZE);
   const [canvasH, setCanvasH] = useState<number>((existingOptions?.canvasH as number) ?? CANVAS_SIZE);
 
@@ -3758,11 +3684,6 @@ export default function BuilderPage() {
   const [showAddLayerModal, setShowAddLayerModal] = useState(false);
 
   useEffect(() => { setMounted(true); }, []);
-  useEffect(() => {
-    if (statusFetcher.data?.statusUpdated && statusFetcher.data.status) {
-      setProductStatus(statusFetcher.data.status);
-    }
-  }, [statusFetcher.data]);
   useEffect(() => {
     setAnswerEditState(null);
     setEditingPrintAreaId(null);
@@ -4140,72 +4061,13 @@ export default function BuilderPage() {
       {/* ═══════════════ LEFT PANEL ══════════════════════════════════════ */}
       <div style={{ width: 268, borderRight: "1px solid #e5e7eb", display: "flex", flexDirection: "column", overflow: "hidden", background: "#fff" }}>
 
-        {/* ── Row 1: breadcrumb + status ── */}
-        <div style={{ padding: "8px 12px 6px", display: "flex", alignItems: "center", justifyContent: "space-between", background: "#fafafa", borderBottom: "1px solid #f3f4f6" }}>
+        {/* ── Row 1: breadcrumb ── */}
+        <div style={{ padding: "8px 12px 6px", display: "flex", alignItems: "center", background: "#fafafa", borderBottom: "1px solid #f3f4f6" }}>
           <Link to="/app/products" style={{ fontSize: 12, color: "#6b7280", textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 4, fontWeight: 500 }}>
             <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M7.5 2L4 6l3.5 4" stroke="#9ca3af" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
             Products
           </Link>
-          <div style={{ position: "relative" }}>
-            <button
-              onClick={() => setShowStatusMenu((v) => !v)}
-              disabled={statusFetcher.state !== "idle"}
-              style={{
-                display: "inline-flex", alignItems: "center", gap: 4,
-                padding: "2px 8px", borderRadius: 10, border: "none", cursor: "pointer",
-                fontSize: 11, fontWeight: 600, lineHeight: 1.6,
-                background: productStatus === "ACTIVE" ? "#d1fae5" : "#f3f4f6",
-                color: productStatus === "ACTIVE" ? "#065f46" : "#6b7280",
-                opacity: statusFetcher.state !== "idle" ? 0.6 : 1,
-              }}
-            >
-              <span style={{ width: 5, height: 5, borderRadius: "50%", background: productStatus === "ACTIVE" ? "#10b981" : "#9ca3af", display: "inline-block" }} />
-              {statusFetcher.state !== "idle" ? "…" : productStatus === "ACTIVE" ? "Active" : "Draft"}
-            </button>
-            {showStatusMenu && (
-              <div
-                style={{ position: "absolute", top: "calc(100% + 4px)", right: 0, zIndex: 100, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 8, boxShadow: "0 4px 12px rgba(0,0,0,0.12)", minWidth: 130, overflow: "hidden" }}
-                onMouseLeave={() => setShowStatusMenu(false)}
-              >
-                {(["ACTIVE", "DRAFT"] as const).map((s) => (
-                  <button
-                    key={s}
-                    disabled={productStatus === s}
-                    onClick={() => {
-                      setShowStatusMenu(false);
-                      const fd = new FormData();
-                      fd.append("intent", "updateProductStatus");
-                      fd.append("status", s);
-                      statusFetcher.submit(fd, { method: "post" });
-                    }}
-                    style={{
-                      display: "flex", alignItems: "center", gap: 8, width: "100%",
-                      padding: "8px 12px", border: "none", background: productStatus === s ? "#f9fafb" : "#fff",
-                      cursor: productStatus === s ? "default" : "pointer", fontSize: 12,
-                      color: productStatus === s ? "#9ca3af" : "#111827", textAlign: "left",
-                    }}
-                  >
-                    <span style={{ width: 6, height: 6, borderRadius: "50%", background: s === "ACTIVE" ? "#10b981" : "#9ca3af", flexShrink: 0 }} />
-                    {s === "ACTIVE" ? "Active" : "Draft"}
-                    {productStatus === s && <span style={{ marginLeft: "auto", fontSize: 10, color: "#9ca3af" }}>current</span>}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
         </div>
-
-        {/* Publish diagnostics — shown full-width so they can't be missed */}
-        {statusFetcher.data?.publishError && (
-          <div style={{ padding: "10px 14px", background: "#fef2f2", borderBottom: "2px solid #f87171", fontSize: 12, color: "#991b1b", fontWeight: 600, wordBreak: "break-all" }}>
-            ⚠️ Publish failed: {statusFetcher.data.publishError}
-          </div>
-        )}
-        {statusFetcher.data?.publishInfo && !statusFetcher.data?.publishError && (
-          <div style={{ padding: "10px 14px", background: "#f0fdf4", borderBottom: "2px solid #86efac", fontSize: 12, color: "#166534", fontWeight: 600 }}>
-            ✅ {statusFetcher.data.publishInfo}
-          </div>
-        )}
 
         {/* ── Row 2: product image + name ── */}
         <div style={{ padding: "10px 12px", borderBottom: "1px solid #e5e7eb", display: "flex", alignItems: "center", gap: 10 }}>
