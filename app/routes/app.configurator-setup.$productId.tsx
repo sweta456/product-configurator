@@ -63,7 +63,7 @@ export async function loader({ request, params }: any) {
 }
 
 export async function action({ request, params }: any) {
-  const { admin } = await authenticate.admin(request);
+  const { admin, session } = await authenticate.admin(request);
   const decodedId = decodeURIComponent(params.productId);
   const formData = await request.formData();
 
@@ -98,10 +98,14 @@ export async function action({ request, params }: any) {
     )?.node as { id: string } | undefined;
 
     if (!onlineStorePub) {
+      const grantedScopes = session.scope ?? "(none)";
+      const hasPubScope = grantedScopes.includes("write_publications");
       return {
         statusUpdated: true,
         status: newStatus,
-        publishError: "Online Store channel not found. Please close and reopen the app to grant publication permissions, then set Active again.",
+        publishError: hasPubScope
+          ? `Online Store publication not found in response. Raw: ${JSON.stringify(pubsData.data?.publications)}`
+          : `Missing write_publications scope. Granted scopes: ${grantedScopes}. → Run 'shopify app deploy' then delete the session and reopen the app.`,
       };
     }
 
