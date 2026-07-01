@@ -159,7 +159,7 @@ export async function action({ request }: any) {
       productUpdate(input: { id: $id, status: $status }) {
         product {
           id status
-          variants(first: 20) { edges { node { inventoryItem { id tracked } } } }
+          variants(first: 100) { edges { node { id } } }
         }
         userErrors { field message }
       }
@@ -170,72 +170,51 @@ export async function action({ request }: any) {
   const errs = statusData.data?.productUpdate?.userErrors ?? [];
   if (errs.length > 0) return { error: errs[0].message };
 
-  // Auto-enable inventory tracking when publishing via REST
-  // (GraphQL inventoryItemUpdate fails silently on untracked items in this API version)
+  // When publishing, force inventoryPolicy: CONTINUE on all variants so the
+  // product always shows "Add to cart" regardless of stock/location settings.
   if (newStatus === "ACTIVE") {
-    const variants = statusData.data?.productUpdate?.product?.variants?.edges ?? [];
-    const untrackedItems = variants
-      .map((e: any) => e.node.inventoryItem)
-      .filter((item: any) => item && !item.tracked);
+    const variantIds: string[] = (
+      statusData.data?.productUpdate?.product?.variants?.edges ?? []
+    ).map((e: any) => e.node.id);
 
-    await Promise.all(
-      untrackedItems.map((item: any) => {
-        const numericItemId = (item.id as string).replace("gid://shopify/InventoryItem/", "");
-        return fetch(
-          `https://${session.shop}/admin/api/${apiVersion}/inventory_items/${numericItemId}.json`,
-          {
-            method: "PUT",
-            headers: {
-              "Content-Type": "application/json",
-              "X-Shopify-Access-Token": session.accessToken as string,
-            },
-            body: JSON.stringify({
-              inventory_item: { id: parseInt(numericItemId, 10), tracked: true },
-            }),
+    if (variantIds.length > 0) {
+      await admin.graphql(
+        `mutation SetInventoryPolicy($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
+          productVariantsBulkUpdate(productId: $productId, variants: $variants) {
+            userErrors { field message }
+          }
+        }`,
+        {
+          variables: {
+            productId,
+            variants: variantIds.map((id) => ({ id, inventoryPolicy: "CONTINUE" })),
           },
-        );
-      }),
-    );
-  }
-
-  // Publish / unpublish on the Online Store channel via publishablePublish.
-  // Requires write_publications + read_publications scopes.
-  const pubsResp = await admin.graphql(`
-    query {
-      publications(first: 20) {
-        edges { node { id name } }
-      }
+        },
+      );
     }
-  `);
-  const pubsData = await pubsResp.json();
-  const onlineStorePub = (pubsData.data?.publications?.edges ?? []).find(
-    (e: any) => (e.node.name as string).toLowerCase().includes("online store"),
-  )?.node as { id: string } | undefined;
-
-  if (!onlineStorePub) {
-    return { error: "Online Store channel not found. Please re-open the app to grant publication permissions, then try again." };
   }
 
-  const mutation = newStatus === "ACTIVE"
-    ? `mutation Pub($id: ID!, $input: [PublicationInput!]!) {
-        publishablePublish(id: $id, input: $input) {
-          publishable { ... on Product { id } }
-          userErrors { field message }
-        }
-      }`
-    : `mutation Pub($id: ID!, $input: [PublicationInput!]!) {
-        publishableUnpublish(id: $id, input: $input) {
-          publishable { ... on Product { id } }
-          userErrors { field message }
-        }
-      }`;
+  // Use REST to set published: true/false on the Online Store channel.
+  // This is simpler and requires no publication scope — just write_products.
+  const numericProductId = productId.replace("gid://shopify/Product/", "");
+  const restResp = await fetch(
+    `https://${session.shop}/admin/api/${apiVersion}/products/${numericProductId}.json`,
+    {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Shopify-Access-Token": session.accessToken as string,
+      },
+      body: JSON.stringify({
+        product: { id: parseInt(numericProductId, 10), published: newStatus === "ACTIVE" },
+      }),
+    },
+  );
 
-  const pubResp = await admin.graphql(mutation, {
-    variables: { id: productId, input: [{ publicationId: onlineStorePub.id }] },
-  });
-  const pubData = await pubResp.json();
-  const pubErrors = (pubData.data?.publishablePublish ?? pubData.data?.publishableUnpublish)?.userErrors ?? [];
-  if (pubErrors.length > 0) return { error: pubErrors[0].message };
+  if (!restResp.ok) {
+    const errBody = await restResp.json().catch(() => ({}));
+    return { error: String(errBody.errors ?? "Failed to update Online Store visibility") };
+  }
 
   return { success: true, productId, status: newStatus };
 }
