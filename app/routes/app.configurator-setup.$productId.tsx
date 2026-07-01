@@ -127,12 +127,18 @@ export async function action({ request, params }: any) {
       variables: { id: decodedId, input: [{ publicationId: onlineStorePub.id }] },
     });
     const pubData = await pubResp.json();
+
+    // Top-level GraphQL errors (e.g. scope denied at Partners Dashboard level)
+    if (pubData.errors?.length > 0) {
+      return { statusUpdated: true, status: newStatus, publishError: `GraphQL error: ${pubData.errors[0].message}` };
+    }
+
     const pubErrors = (pubData.data?.publishablePublish ?? pubData.data?.publishableUnpublish)?.userErrors ?? [];
     if (pubErrors.length > 0) {
       return { statusUpdated: true, status: newStatus, publishError: pubErrors[0].message };
     }
 
-    return { statusUpdated: true, status: newStatus };
+    return { statusUpdated: true, status: newStatus, publishInfo: `Published to: ${onlineStorePub.id}` };
   }
 
   const layers = JSON.parse(formData.get("layers") as string);
@@ -3639,7 +3645,7 @@ export default function BuilderPage() {
   const [customTitle, setCustomTitle] = useState<string>(product.title ?? "");
   const [productStatus, setProductStatus] = useState<string>(product.status ?? "DRAFT");
   const [showStatusMenu, setShowStatusMenu] = useState(false);
-  const statusFetcher = useFetcher<{ statusUpdated?: boolean; status?: string; publishError?: string }>();
+  const statusFetcher = useFetcher<{ statusUpdated?: boolean; status?: string; publishError?: string; publishInfo?: string }>();
   const [canvasW, setCanvasW] = useState<number>((existingOptions?.canvasW as number) ?? CANVAS_SIZE);
   const [canvasH, setCanvasH] = useState<number>((existingOptions?.canvasH as number) ?? CANVAS_SIZE);
 
@@ -4189,10 +4195,15 @@ export default function BuilderPage() {
           </div>
         </div>
 
-        {/* Publish error */}
+        {/* Publish diagnostics — shown full-width so they can't be missed */}
         {statusFetcher.data?.publishError && (
-          <div style={{ padding: "6px 12px", background: "#fef2f2", borderBottom: "1px solid #fecaca", fontSize: 11, color: "#b91c1c" }}>
-            {statusFetcher.data.publishError}
+          <div style={{ padding: "10px 14px", background: "#fef2f2", borderBottom: "2px solid #f87171", fontSize: 12, color: "#991b1b", fontWeight: 600, wordBreak: "break-all" }}>
+            ⚠️ Publish failed: {statusFetcher.data.publishError}
+          </div>
+        )}
+        {statusFetcher.data?.publishInfo && !statusFetcher.data?.publishError && (
+          <div style={{ padding: "10px 14px", background: "#f0fdf4", borderBottom: "2px solid #86efac", fontSize: 12, color: "#166534", fontWeight: 600 }}>
+            ✅ {statusFetcher.data.publishInfo}
           </div>
         )}
 
