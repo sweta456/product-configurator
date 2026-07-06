@@ -16,9 +16,7 @@ const shopify = shopifyApp({
   authPathPrefix: "/auth",
   sessionStorage: new PrismaSessionStorage(prisma),
   distribution: AppDistribution.AppStore,
-  future: {
-    expiringOfflineAccessTokens: true,
-  },
+  future: {},
   ...(process.env.SHOP_CUSTOM_DOMAIN
     ? { customShopDomains: [process.env.SHOP_CUSTOM_DOMAIN] }
     : {}),
@@ -26,31 +24,36 @@ const shopify = shopifyApp({
     afterAuth: async ({ admin }) => {
       // Liquid has no built-in way to read an app's URL (`app.url` isn't a real
       // property), so the theme block reads this shop metafield instead.
-      const shopResponse = await admin.graphql(`#graphql
-        query { shop { id } }
-      `);
-      const { data } = await shopResponse.json();
+      // Wrapped in try/catch so a metafield write failure never breaks the
+      // merchant-facing request that triggered auth.
+      try {
+        const shopResponse = await admin.graphql(`#graphql
+          query { shop { id } }
+        `);
+        const { data } = await shopResponse.json();
 
-      await admin.graphql(
-        `#graphql
-        mutation SetConfiguratorAppUrl($ownerId: ID!, $value: String!) {
-          metafieldsSet(metafields: [{
-            ownerId: $ownerId
-            namespace: "$app"
-            key: "configurator_app_url"
-            type: "single_line_text_field"
-            value: $value
-          }]) {
-            userErrors { field message }
-          }
-        }`,
-        {
-          variables: {
-            ownerId: data.shop.id,
-            value: process.env.SHOPIFY_APP_URL || "",
+        await admin.graphql(
+          `#graphql
+          mutation SetConfiguratorAppUrl($ownerId: ID!, $value: String!) {
+            metafieldsSet(metafields: [{
+              ownerId: $ownerId
+              key: "configurator_app_url"
+              type: "single_line_text_field"
+              value: $value
+            }]) {
+              userErrors { field message }
+            }
+          }`,
+          {
+            variables: {
+              ownerId: data.shop.id,
+              value: process.env.SHOPIFY_APP_URL || "",
+            },
           },
-        },
-      );
+        );
+      } catch (error) {
+        console.error("Failed to set configurator_app_url metafield:", error);
+      }
     },
   },
 });

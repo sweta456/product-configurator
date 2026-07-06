@@ -1,4 +1,3 @@
-var _a;
 import { jsx, jsxs, Fragment } from "react/jsx-runtime";
 import { PassThrough } from "stream";
 import { renderToPipeableStream } from "react-dom/server";
@@ -29,15 +28,41 @@ const shopify = shopifyApp({
   apiKey: process.env.SHOPIFY_API_KEY,
   apiSecretKey: process.env.SHOPIFY_API_SECRET || "",
   apiVersion: ApiVersion.October25,
-  scopes: (_a = process.env.SCOPES) == null ? void 0 : _a.split(","),
+  scopes: "write_products,read_products,write_orders,read_orders,read_inventory,write_inventory,read_locations,write_publications,read_publications",
   appUrl: process.env.SHOPIFY_APP_URL || "",
   authPathPrefix: "/auth",
   sessionStorage: new PrismaSessionStorage(prisma),
   distribution: AppDistribution.AppStore,
-  future: {
-    expiringOfflineAccessTokens: true
-  },
-  ...process.env.SHOP_CUSTOM_DOMAIN ? { customShopDomains: [process.env.SHOP_CUSTOM_DOMAIN] } : {}
+  future: {},
+  ...process.env.SHOP_CUSTOM_DOMAIN ? { customShopDomains: [process.env.SHOP_CUSTOM_DOMAIN] } : {},
+  hooks: {
+    afterAuth: async ({ admin }) => {
+      const shopResponse = await admin.graphql(`#graphql
+        query { shop { id } }
+      `);
+      const { data } = await shopResponse.json();
+      await admin.graphql(
+        `#graphql
+        mutation SetConfiguratorAppUrl($ownerId: ID!, $value: String!) {
+          metafieldsSet(metafields: [{
+            ownerId: $ownerId
+            namespace: "$app"
+            key: "configurator_app_url"
+            type: "single_line_text_field"
+            value: $value
+          }]) {
+            userErrors { field message }
+          }
+        }`,
+        {
+          variables: {
+            ownerId: data.shop.id,
+            value: process.env.SHOPIFY_APP_URL || ""
+          }
+        }
+      );
+    }
+  }
 });
 const apiVersion = ApiVersion.October25;
 const addDocumentResponseHeaders = shopify.addDocumentResponseHeaders;
@@ -90,7 +115,7 @@ const entryServer = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineP
   default: handleRequest,
   streamTimeout
 }, Symbol.toStringTag, { value: "Module" }));
-const polarisStyles = "/assets/styles-ch5xpQLx.css";
+const polarisStyles = "/assets/styles-x1cbIzLV.css";
 const links = () => [{
   rel: "preconnect",
   href: "https://cdn.shopify.com/"
@@ -455,9 +480,9 @@ function GlbScene({ glbUrl, parts, customizations, selectedPartId, hoveredPartId
         {
           object: scene,
           onClick: (e) => {
-            var _a2;
+            var _a;
             e.stopPropagation();
-            const clickedName = (_a2 = e.object) == null ? void 0 : _a2.name;
+            const clickedName = (_a = e.object) == null ? void 0 : _a.name;
             if (clickedName && onPartClick) onPartClick(clickedName);
           }
         }
@@ -486,8 +511,8 @@ const ThreeViewer = forwardRef(
     const glRef = useRef(null);
     useImperativeHandle(ref, () => ({
       toDataURL: () => {
-        var _a2;
-        return ((_a2 = glRef.current) == null ? void 0 : _a2.domElement.toDataURL("image/png")) ?? "";
+        var _a;
+        return ((_a = glRef.current) == null ? void 0 : _a.domElement.toDataURL("image/png")) ?? "";
       }
     }));
     return /* @__PURE__ */ jsx("div", { style: { width, height, borderRadius: 8, overflow: "hidden", background: "#ffffff", cursor: "grab" }, children: /* @__PURE__ */ jsxs(
@@ -518,8 +543,8 @@ const ThreeViewer = forwardRef(
   }
 );
 function getLayerSrc(layer, viewIndex, answerIdx = 0) {
-  var _a2, _b;
-  if (!layer.src && ((_a2 = layer.answers) == null ? void 0 : _a2.length)) {
+  var _a, _b;
+  if (!layer.src && ((_a = layer.answers) == null ? void 0 : _a.length)) {
     const answer = layer.answers[answerIdx] ?? layer.answers[0];
     if ((_b = answer == null ? void 0 : answer.viewImages) == null ? void 0 : _b.length) {
       const slot = answer.viewImages[viewIndex];
@@ -634,7 +659,7 @@ const DISPLAY_TYPE_META = {
   "text-outline": { label: "Text outline", icon: "Ā" }
 };
 function migrateOptions(options, layers) {
-  var _a2, _b;
+  var _a, _b;
   if (options == null ? void 0 : options.questions) return options.questions;
   const questions = [];
   if (options == null ? void 0 : options.colorOptions) {
@@ -649,7 +674,7 @@ function migrateOptions(options, layers) {
       });
     }
   }
-  if ((_a2 = options == null ? void 0 : options.textOption) == null ? void 0 : _a2.enabled) {
+  if ((_a = options == null ? void 0 : options.textOption) == null ? void 0 : _a.enabled) {
     questions.push({
       id: "custom-text",
       name: options.textOption.label || "Custom Text",
@@ -731,9 +756,9 @@ async function loader$c({
   };
 }
 function isVisible$1(q, selectedAnswers, hiddenQuestions) {
-  var _a2;
+  var _a;
   if (hiddenQuestions == null ? void 0 : hiddenQuestions.has(q.id)) return false;
-  if (!((_a2 = q.conditions) == null ? void 0 : _a2.length)) return true;
+  if (!((_a = q.conditions) == null ? void 0 : _a.length)) return true;
   return q.conditions.every((c) => selectedAnswers[c.questionId] === c.value);
 }
 function getEffectiveLayerIds$1(q) {
@@ -963,8 +988,8 @@ function ImageDropdown({
   const [open, setOpen] = useState(false);
   const selectedOpts = q.options.filter((o) => selectedVals.includes(o.value));
   const getThumb = (o) => {
-    var _a2;
-    return o.thumbnailUrl ?? ((_a2 = o.viewImages) == null ? void 0 : _a2.find(Boolean)) ?? null;
+    var _a;
+    return o.thumbnailUrl ?? ((_a = o.viewImages) == null ? void 0 : _a.find(Boolean)) ?? null;
   };
   return /* @__PURE__ */ jsxs("div", {
     style: {
@@ -1076,10 +1101,10 @@ function ImageDropdown({
         overflowY: "auto"
       },
       children: q.options.map((o) => {
-        var _a2;
+        var _a;
         const thumb = getThumb(o);
         const isSelected = selectedVals.includes(o.value);
-        const hasViewImages = (_a2 = o.viewImages) == null ? void 0 : _a2.some(Boolean);
+        const hasViewImages = (_a = o.viewImages) == null ? void 0 : _a.some(Boolean);
         return /* @__PURE__ */ jsxs("button", {
           onClick: () => {
             onToggle(o.value);
@@ -1150,7 +1175,7 @@ function ImageDropdown({
   });
 }
 const configurator_$productId = UNSAFE_withComponentProps(function StorefrontConfiguratorPage() {
-  var _a2, _b, _c;
+  var _a, _b, _c;
   const {
     config,
     productName,
@@ -1184,11 +1209,11 @@ const configurator_$productId = UNSAFE_withComponentProps(function StorefrontCon
   const [canvasScale, setCanvasScale] = useState(1);
   const layers = (config == null ? void 0 : config.layers) ?? [];
   const questions = migrateOptions(config == null ? void 0 : config.options, layers);
-  const logicRules = ((_a2 = config == null ? void 0 : config.options) == null ? void 0 : _a2.logicRules) ?? [];
+  const logicRules = ((_a = config == null ? void 0 : config.options) == null ? void 0 : _a.logicRules) ?? [];
   const numViews = ((_b = config == null ? void 0 : config.options) == null ? void 0 : _b.numViews) ?? 1;
   const [currentView, setCurrentView] = useState(0);
   const [selectedAnswers, setSelectedAnswers] = useState(() => {
-    var _a3, _b2;
+    var _a2, _b2;
     const init = {};
     for (const q of questions) {
       if (q.type === "thumbnail" && q.displayType === "image" && q.swatches.length > 0) init[q.id] = q.swatches[0].value;
@@ -1196,7 +1221,7 @@ const configurator_$productId = UNSAFE_withComponentProps(function StorefrontCon
         if (q.defaultValue) init[q.id] = q.defaultValue;
       }
       if (q.type === "radio") {
-        const v = q.defaultValue || ((_a3 = q.options[0]) == null ? void 0 : _a3.value);
+        const v = q.defaultValue || ((_a2 = q.options[0]) == null ? void 0 : _a2.value);
         if (v) init[q.id] = v;
       }
       if (q.type === "checkbox") init[q.id] = q.defaultChecked ? "true" : "false";
@@ -1207,21 +1232,21 @@ const configurator_$productId = UNSAFE_withComponentProps(function StorefrontCon
   });
   const [layerColors, setLayerColors] = useState({});
   const [layerImageOverrides, setLayerImageOverrides] = useState(() => {
-    var _a3;
+    var _a2;
     const init = {};
     for (const q of questions) {
       if (q.type !== "thumbnail" || q.displayType !== "image") continue;
       const layerIds = getEffectiveLayerIds$1(q);
       if (!layerIds.length || !q.swatches.length) continue;
       const first = q.swatches[0];
-      if ((_a3 = first.viewImages) == null ? void 0 : _a3.length) {
+      if ((_a2 = first.viewImages) == null ? void 0 : _a2.length) {
         for (const lid of layerIds) init[lid] = first.viewImages.map((v) => v || "");
       }
     }
     return init;
   });
   const [labelAnswerImages, setLabelAnswerImages] = useState(() => {
-    var _a3, _b2, _c2;
+    var _a2, _b2, _c2;
     const init = {};
     for (const q of questions) {
       if (q.type === "dropdown" && q.displayType === "image") {
@@ -1229,7 +1254,7 @@ const configurator_$productId = UNSAFE_withComponentProps(function StorefrontCon
         const defaultVal = dq.defaultValue;
         if (!defaultVal) continue;
         const opt = dq.options.find((o) => o.value === defaultVal);
-        if ((_a3 = opt == null ? void 0 : opt.viewImages) == null ? void 0 : _a3.some(Boolean)) {
+        if ((_a2 = opt == null ? void 0 : opt.viewImages) == null ? void 0 : _a2.some(Boolean)) {
           init[q.id] = opt.viewImages;
         }
       }
@@ -1246,11 +1271,11 @@ const configurator_$productId = UNSAFE_withComponentProps(function StorefrontCon
   });
   const [hoverViewImages, setHoverViewImages] = useState(null);
   const [layerTextures, setLayerTextures] = useState(() => {
-    var _a3;
+    var _a2;
     const init = {};
     for (const q of questions) {
       if ((q.type === "color" || q.type === "thumbnail") && q.swatches.length > 0) {
-        const isImageWithViews = q.type === "thumbnail" && q.displayType === "image" && ((_a3 = q.swatches[0].viewImages) == null ? void 0 : _a3.some(Boolean));
+        const isImageWithViews = q.type === "thumbnail" && q.displayType === "image" && ((_a2 = q.swatches[0].viewImages) == null ? void 0 : _a2.some(Boolean));
         if (isImageWithViews) continue;
         const first = q.swatches[0];
         if (!first.imageUrl) continue;
@@ -1269,11 +1294,11 @@ const configurator_$productId = UNSAFE_withComponentProps(function StorefrontCon
     return init;
   });
   const [textColors, setTextColors] = useState(() => {
-    var _a3;
+    var _a2;
     const init = {};
     for (const q of questions) {
       if ((q.type === "color" || q.type === "thumbnail") && q.swatches.length > 0) {
-        const isImageWithViews = q.type === "thumbnail" && q.displayType === "image" && ((_a3 = q.swatches[0].viewImages) == null ? void 0 : _a3.some(Boolean));
+        const isImageWithViews = q.type === "thumbnail" && q.displayType === "image" && ((_a2 = q.swatches[0].viewImages) == null ? void 0 : _a2.some(Boolean));
         if (isImageWithViews) continue;
         const allIds = getEffectiveLayerIds$1(q);
         for (const id of allIds) {
@@ -1329,7 +1354,7 @@ const configurator_$productId = UNSAFE_withComponentProps(function StorefrontCon
   }, []);
   useEffect(() => {
     const handler = (event) => {
-      var _a3;
+      var _a2;
       if (!event.data || event.data.type !== "configurator:load-selections") return;
       const sel = event.data.selections;
       if (!sel) return;
@@ -1343,7 +1368,7 @@ const configurator_$productId = UNSAFE_withComponentProps(function StorefrontCon
             if (!layerIds.length) continue;
             const val = sel.selectedAnswers[q.id];
             if (val) {
-              const swatch = (_a3 = q.swatches) == null ? void 0 : _a3.find((s) => s.value === val);
+              const swatch = (_a2 = q.swatches) == null ? void 0 : _a2.find((s) => s.value === val);
               for (const layerId of layerIds) {
                 if (swatch == null ? void 0 : swatch.imageUrl) newTextures[layerId] = swatch.imageUrl;
                 newColors[layerId] = val;
@@ -1369,11 +1394,11 @@ const configurator_$productId = UNSAFE_withComponentProps(function StorefrontCon
     return () => window.removeEventListener("message", handler);
   }, [questions]);
   useEffect(() => {
-    var _a3;
+    var _a2;
     if (!transformerRef.current) return;
     const node = selectedId ? nodeRefs[selectedId] : null;
     transformerRef.current.nodes(node ? [node] : []);
-    (_a3 = transformerRef.current.getLayer()) == null ? void 0 : _a3.batchDraw();
+    (_a2 = transformerRef.current.getLayer()) == null ? void 0 : _a2.batchDraw();
   }, [selectedId, nodeRefs]);
   useEffect(() => {
     if (!canvasAreaRef.current) return;
@@ -1476,7 +1501,7 @@ const configurator_$productId = UNSAFE_withComponentProps(function StorefrontCon
     }
   };
   const handleAddToCart = () => {
-    var _a3;
+    var _a2;
     const properties = {};
     const childToGroupName = {};
     for (const q of questions) {
@@ -1493,7 +1518,7 @@ const configurator_$productId = UNSAFE_withComponentProps(function StorefrontCon
     for (const q of questions) {
       if (!isVisible$1(q, selectedAnswers, hiddenQuestions)) continue;
       if (q.type === "color" || q.type === "thumbnail") {
-        const selectedVal = selectedAnswers[q.id] || ((_a3 = q.swatches[0]) == null ? void 0 : _a3.value);
+        const selectedVal = selectedAnswers[q.id] || ((_a2 = q.swatches[0]) == null ? void 0 : _a2.value);
         if (selectedVal) {
           const swatch = q.swatches.find((s) => s.value === selectedVal);
           properties[propKey(q)] = swatch ? swatch.label : selectedVal;
@@ -1507,8 +1532,8 @@ const configurator_$productId = UNSAFE_withComponentProps(function StorefrontCon
           const vals = (selectedAnswers[q.id] ?? "").split(",").filter(Boolean);
           if (vals.length > 0) {
             const labels = vals.map((v) => {
-              var _a4;
-              return ((_a4 = dq.options.find((o) => o.value === v)) == null ? void 0 : _a4.label) ?? v;
+              var _a3;
+              return ((_a3 = dq.options.find((o) => o.value === v)) == null ? void 0 : _a3.label) ?? v;
             });
             properties[propKey(q)] = labels.join(", ");
           }
@@ -1531,8 +1556,8 @@ const configurator_$productId = UNSAFE_withComponentProps(function StorefrontCon
         const selectedVals = (selectedAnswers[q.id] ?? "").split(",").filter(Boolean);
         if (selectedVals.length > 0) {
           const labels = selectedVals.map((v) => {
-            var _a4;
-            return ((_a4 = q.answers.find((a) => a.value === v)) == null ? void 0 : _a4.label) ?? v;
+            var _a3;
+            return ((_a3 = q.answers.find((a) => a.value === v)) == null ? void 0 : _a3.label) ?? v;
           });
           properties[propKey(q)] = labels.join(", ");
         }
@@ -1540,8 +1565,8 @@ const configurator_$productId = UNSAFE_withComponentProps(function StorefrontCon
     }
     setSelectedId(null);
     setTimeout(async () => {
-      var _a4;
-      const previewDataUrl = (_a4 = stageRef.current) == null ? void 0 : _a4.toDataURL({
+      var _a3;
+      const previewDataUrl = (_a3 = stageRef.current) == null ? void 0 : _a3.toDataURL({
         pixelRatio: 2
       });
       let previewUrl = "";
@@ -1585,9 +1610,9 @@ const configurator_$productId = UNSAFE_withComponentProps(function StorefrontCon
     hiddenQuestions
   } = evaluateLogicRules(logicRules, selectedAnswers);
   const visibleQuestions = questions.filter((q) => {
-    var _a3, _b2;
+    var _a2, _b2;
     if (!isVisible$1(q, selectedAnswers, hiddenQuestions)) return false;
-    if ((q.type === "radio" || q.type === "dropdown") && !((_a3 = q.options) == null ? void 0 : _a3.length)) return false;
+    if ((q.type === "radio" || q.type === "dropdown") && !((_a2 = q.options) == null ? void 0 : _a2.length)) return false;
     if ((q.type === "color" || q.type === "thumbnail") && !((_b2 = q.swatches) == null ? void 0 : _b2.length)) return false;
     return true;
   });
@@ -1652,7 +1677,7 @@ const configurator_$productId = UNSAFE_withComponentProps(function StorefrontCon
       if (labelAnswers.length > 0) {
         const activeVals = (selectedAnswers[q.id] ?? "").split(",").filter(Boolean);
         const toggleAnswer = (val) => {
-          var _a3, _b2;
+          var _a2, _b2;
           if (q.multipleSelection) {
             const next = activeVals.includes(val) ? activeVals.filter((v) => v !== val) : [...activeVals, val];
             setSelectedAnswers((p) => ({
@@ -1666,7 +1691,7 @@ const configurator_$productId = UNSAFE_withComponentProps(function StorefrontCon
               [q.id]: newVal
             }));
             if (newVal) {
-              const ans = (_a3 = q.answers) == null ? void 0 : _a3.find((a) => a.value === newVal);
+              const ans = (_a2 = q.answers) == null ? void 0 : _a2.find((a) => a.value === newVal);
               if ((_b2 = ans == null ? void 0 : ans.viewImages) == null ? void 0 : _b2.some(Boolean)) {
                 setLabelAnswerImages((p) => ({
                   ...p,
@@ -1707,9 +1732,9 @@ const configurator_$productId = UNSAFE_withComponentProps(function StorefrontCon
               gap: 8
             },
             children: labelAnswers.map((a) => {
-              var _a3;
+              var _a2;
               const isAct = activeVals.includes(a.value);
-              const hasViewImages = (_a3 = a.viewImages) == null ? void 0 : _a3.some(Boolean);
+              const hasViewImages = (_a2 = a.viewImages) == null ? void 0 : _a2.some(Boolean);
               return /* @__PURE__ */ jsxs("button", {
                 className: `cf-pill-btn${isAct ? " active" : ""}`,
                 onClick: () => toggleAnswer(a.value),
@@ -1864,7 +1889,7 @@ const configurator_$productId = UNSAFE_withComponentProps(function StorefrontCon
       const isImageDrop = dq.displayType === "image";
       const selectedVals = dq.multipleSelection ? (selectedAnswers[q.id] ?? "").split(",").filter(Boolean) : [selectedAnswers[q.id] ?? ""].filter(Boolean);
       const toggleVal = (val) => {
-        var _a3, _b2;
+        var _a2, _b2;
         if (dq.multipleSelection) {
           const cur = (selectedAnswers[q.id] ?? "").split(",").filter(Boolean);
           const isRemoving = cur.includes(val);
@@ -1874,7 +1899,7 @@ const configurator_$productId = UNSAFE_withComponentProps(function StorefrontCon
             [q.id]: next.join(",")
           }));
           const opt = dq.options.find((o) => o.value === val);
-          if (!isRemoving && ((_a3 = opt == null ? void 0 : opt.viewImages) == null ? void 0 : _a3.some(Boolean))) {
+          if (!isRemoving && ((_a2 = opt == null ? void 0 : opt.viewImages) == null ? void 0 : _a2.some(Boolean))) {
             setLabelAnswerImages((p) => ({
               ...p,
               [q.id]: opt.viewImages
@@ -2141,9 +2166,9 @@ const configurator_$productId = UNSAFE_withComponentProps(function StorefrontCon
               lineHeight: 1.5
             },
             onFocus: (e) => {
-              var _a3;
+              var _a2;
               e.target.style.borderColor = "var(--cf-accent)";
-              if (((_a3 = pa == null ? void 0 : pa.visibleViews) == null ? void 0 : _a3.length) > 0) setCurrentView(Math.min(pa.visibleViews[0] - 1, numViews - 1));
+              if (((_a2 = pa == null ? void 0 : pa.visibleViews) == null ? void 0 : _a2.length) > 0) setCurrentView(Math.min(pa.visibleViews[0] - 1, numViews - 1));
             },
             onBlur: (e) => e.target.style.borderColor = "var(--cf-border)"
           }), /* @__PURE__ */ jsxs("span", {
@@ -2212,8 +2237,8 @@ const configurator_$productId = UNSAFE_withComponentProps(function StorefrontCon
             display: "none"
           },
           onChange: (e) => {
-            var _a3;
-            const f = (_a3 = e.target.files) == null ? void 0 : _a3[0];
+            var _a2;
+            const f = (_a2 = e.target.files) == null ? void 0 : _a2[0];
             if (f) handleFileUpload(q.id, f);
           }
         })]
@@ -2593,12 +2618,12 @@ const configurator_$productId = UNSAFE_withComponentProps(function StorefrontCon
                     if (!areas || areas.length === 0) return true;
                     return areas.some((pa) => pa.visibleViews.includes(currentView + 1));
                   }).map((q) => {
-                    var _a3, _b2;
+                    var _a2, _b2;
                     const img = uploadedImages[q.id];
                     if (!img) return null;
                     return /* @__PURE__ */ jsx(Image, {
                       image: img,
-                      x: (((_a3 = q.position) == null ? void 0 : _a3.x) ?? 100) * COORD_SCALE$1,
+                      x: (((_a2 = q.position) == null ? void 0 : _a2.x) ?? 100) * COORD_SCALE$1,
                       y: (((_b2 = q.position) == null ? void 0 : _b2.y) ?? 100) * COORD_SCALE$1,
                       width: (q.defaultWidth ?? 120) * COORD_SCALE$1,
                       height: (q.defaultHeight ?? 120) * COORD_SCALE$1,
@@ -2992,8 +3017,8 @@ const route$1 = UNSAFE_withComponentProps(function Auth() {
             details: "example.myshopify.com",
             value: shop,
             onChange: (e) => {
-              var _a2, _b;
-              return setShop(((_a2 = e.target) == null ? void 0 : _a2.value) ?? ((_b = e.currentTarget) == null ? void 0 : _b.value) ?? "");
+              var _a, _b;
+              return setShop(((_a = e.target) == null ? void 0 : _a.value) ?? ((_b = e.currentTarget) == null ? void 0 : _b.value) ?? "");
             },
             autocomplete: "on",
             error: errors == null ? void 0 : errors.shop
@@ -3023,29 +3048,15 @@ const route9 = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProper
   default: route$1,
   loader: loader$b
 }, Symbol.toStringTag, { value: "Module" }));
-const loader$a = async ({
-  request
-}) => {
-  await authenticate.admin(request);
-  return null;
-};
-const headers$1 = (headersArgs) => {
-  return boundary.headers(headersArgs);
-};
-const route10 = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
-  __proto__: null,
-  headers: headers$1,
-  loader: loader$a
-}, Symbol.toStringTag, { value: "Module" }));
-const index = "_index_1hqgz_1";
-const heading = "_heading_1hqgz_21";
-const text = "_text_1hqgz_23";
-const content = "_content_1hqgz_43";
-const form = "_form_1hqgz_53";
-const label = "_label_1hqgz_69";
-const input = "_input_1hqgz_85";
-const button = "_button_1hqgz_93";
-const list = "_list_1hqgz_101";
+const index = "_index_12o3y_1";
+const heading = "_heading_12o3y_11";
+const text = "_text_12o3y_12";
+const content = "_content_12o3y_22";
+const form = "_form_12o3y_27";
+const label = "_label_12o3y_35";
+const input = "_input_12o3y_43";
+const button = "_button_12o3y_47";
+const list = "_list_12o3y_51";
 const styles = {
   index,
   heading,
@@ -3057,7 +3068,7 @@ const styles = {
   button,
   list
 };
-const loader$9 = async ({
+const loader$a = async ({
   request
 }) => {
   const url = new URL(request.url);
@@ -3121,9 +3132,23 @@ const route = UNSAFE_withComponentProps(function App2() {
     })
   });
 });
-const route11 = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
+const route10 = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
   __proto__: null,
   default: route,
+  loader: loader$a
+}, Symbol.toStringTag, { value: "Module" }));
+const loader$9 = async ({
+  request
+}) => {
+  await authenticate.admin(request);
+  return null;
+};
+const headers$1 = (headersArgs) => {
+  return boundary.headers(headersArgs);
+};
+const route11 = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
+  __proto__: null,
+  headers: headers$1,
   loader: loader$9
 }, Symbol.toStringTag, { value: "Module" }));
 const Polaris = /* @__PURE__ */ JSON.parse('{"ActionMenu":{"Actions":{"moreActions":"More actions"},"RollupActions":{"rollupButton":"View actions"}},"ActionList":{"SearchField":{"clearButtonLabel":"Clear","search":"Search","placeholder":"Search actions"}},"Avatar":{"label":"Avatar","labelWithInitials":"Avatar with initials {initials}"},"Autocomplete":{"spinnerAccessibilityLabel":"Loading","ellipsis":"{content}…"},"Badge":{"PROGRESS_LABELS":{"incomplete":"Incomplete","partiallyComplete":"Partially complete","complete":"Complete"},"TONE_LABELS":{"info":"Info","success":"Success","warning":"Warning","critical":"Critical","attention":"Attention","new":"New","readOnly":"Read-only","enabled":"Enabled"},"progressAndTone":"{toneLabel} {progressLabel}"},"Banner":{"dismissButton":"Dismiss notification"},"Button":{"spinnerAccessibilityLabel":"Loading"},"Common":{"checkbox":"checkbox","undo":"Undo","cancel":"Cancel","clear":"Clear","close":"Close","submit":"Submit","more":"More"},"ContextualSaveBar":{"save":"Save","discard":"Discard"},"DataTable":{"sortAccessibilityLabel":"sort {direction} by","navAccessibilityLabel":"Scroll table {direction} one column","totalsRowHeading":"Totals","totalRowHeading":"Total"},"DatePicker":{"previousMonth":"Show previous month, {previousMonthName} {showPreviousYear}","nextMonth":"Show next month, {nextMonth} {nextYear}","today":"Today ","start":"Start of range","end":"End of range","months":{"january":"January","february":"February","march":"March","april":"April","may":"May","june":"June","july":"July","august":"August","september":"September","october":"October","november":"November","december":"December"},"days":{"monday":"Monday","tuesday":"Tuesday","wednesday":"Wednesday","thursday":"Thursday","friday":"Friday","saturday":"Saturday","sunday":"Sunday"},"daysAbbreviated":{"monday":"Mo","tuesday":"Tu","wednesday":"We","thursday":"Th","friday":"Fr","saturday":"Sa","sunday":"Su"}},"DiscardConfirmationModal":{"title":"Discard all unsaved changes","message":"If you discard changes, you’ll delete any edits you made since you last saved.","primaryAction":"Discard changes","secondaryAction":"Continue editing"},"DropZone":{"single":{"overlayTextFile":"Drop file to upload","overlayTextImage":"Drop image to upload","overlayTextVideo":"Drop video to upload","actionTitleFile":"Add file","actionTitleImage":"Add image","actionTitleVideo":"Add video","actionHintFile":"or drop file to upload","actionHintImage":"or drop image to upload","actionHintVideo":"or drop video to upload","labelFile":"Upload file","labelImage":"Upload image","labelVideo":"Upload video"},"allowMultiple":{"overlayTextFile":"Drop files to upload","overlayTextImage":"Drop images to upload","overlayTextVideo":"Drop videos to upload","actionTitleFile":"Add files","actionTitleImage":"Add images","actionTitleVideo":"Add videos","actionHintFile":"or drop files to upload","actionHintImage":"or drop images to upload","actionHintVideo":"or drop videos to upload","labelFile":"Upload files","labelImage":"Upload images","labelVideo":"Upload videos"},"errorOverlayTextFile":"File type is not valid","errorOverlayTextImage":"Image type is not valid","errorOverlayTextVideo":"Video type is not valid"},"EmptySearchResult":{"altText":"Empty search results"},"Frame":{"skipToContent":"Skip to content","navigationLabel":"Navigation","Navigation":{"closeMobileNavigationLabel":"Close navigation"}},"FullscreenBar":{"back":"Back","accessibilityLabel":"Exit fullscreen mode"},"Filters":{"moreFilters":"More filters","moreFiltersWithCount":"More filters ({count})","filter":"Filter {resourceName}","noFiltersApplied":"No filters applied","cancel":"Cancel","done":"Done","clearAllFilters":"Clear all filters","clear":"Clear","clearLabel":"Clear {filterName}","addFilter":"Add filter","clearFilters":"Clear all","searchInView":"in:{viewName}"},"FilterPill":{"clear":"Clear","unsavedChanges":"Unsaved changes - {label}"},"IndexFilters":{"searchFilterTooltip":"Search and filter","searchFilterTooltipWithShortcut":"Search and filter (F)","searchFilterAccessibilityLabel":"Search and filter results","sort":"Sort your results","addView":"Add a new view","newView":"Custom search","SortButton":{"ariaLabel":"Sort the results","tooltip":"Sort","title":"Sort by","sorting":{"asc":"Ascending","desc":"Descending","az":"A-Z","za":"Z-A"}},"EditColumnsButton":{"tooltip":"Edit columns","accessibilityLabel":"Customize table column order and visibility"},"UpdateButtons":{"cancel":"Cancel","update":"Update","save":"Save","saveAs":"Save as","modal":{"title":"Save view as","label":"Name","sameName":"A view with this name already exists. Please choose a different name.","save":"Save","cancel":"Cancel"}}},"IndexProvider":{"defaultItemSingular":"Item","defaultItemPlural":"Items","allItemsSelected":"All {itemsLength}+ {resourceNamePlural} are selected","selected":"{selectedItemsCount} selected","a11yCheckboxDeselectAllSingle":"Deselect {resourceNameSingular}","a11yCheckboxSelectAllSingle":"Select {resourceNameSingular}","a11yCheckboxDeselectAllMultiple":"Deselect all {itemsLength} {resourceNamePlural}","a11yCheckboxSelectAllMultiple":"Select all {itemsLength} {resourceNamePlural}"},"IndexTable":{"emptySearchTitle":"No {resourceNamePlural} found","emptySearchDescription":"Try changing the filters or search term","onboardingBadgeText":"New","resourceLoadingAccessibilityLabel":"Loading {resourceNamePlural}…","selectAllLabel":"Select all {resourceNamePlural}","selected":"{selectedItemsCount} selected","undo":"Undo","selectAllItems":"Select all {itemsLength}+ {resourceNamePlural}","selectItem":"Select {resourceName}","selectButtonText":"Select","sortAccessibilityLabel":"sort {direction} by"},"Loading":{"label":"Page loading bar"},"Modal":{"iFrameTitle":"body markup","modalWarning":"These required properties are missing from Modal: {missingProps}"},"Page":{"Header":{"rollupActionsLabel":"View actions for {title}","pageReadyAccessibilityLabel":"{title}. This page is ready"}},"Pagination":{"previous":"Previous","next":"Next","pagination":"Pagination"},"ProgressBar":{"negativeWarningMessage":"Values passed to the progress prop shouldn’t be negative. Resetting {progress} to 0.","exceedWarningMessage":"Values passed to the progress prop shouldn’t exceed 100. Setting {progress} to 100."},"ResourceList":{"sortingLabel":"Sort by","defaultItemSingular":"item","defaultItemPlural":"items","showing":"Showing {itemsCount} {resource}","showingTotalCount":"Showing {itemsCount} of {totalItemsCount} {resource}","loading":"Loading {resource}","selected":"{selectedItemsCount} selected","allItemsSelected":"All {itemsLength}+ {resourceNamePlural} in your store are selected","allFilteredItemsSelected":"All {itemsLength}+ {resourceNamePlural} in this filter are selected","selectAllItems":"Select all {itemsLength}+ {resourceNamePlural} in your store","selectAllFilteredItems":"Select all {itemsLength}+ {resourceNamePlural} in this filter","emptySearchResultTitle":"No {resourceNamePlural} found","emptySearchResultDescription":"Try changing the filters or search term","selectButtonText":"Select","a11yCheckboxDeselectAllSingle":"Deselect {resourceNameSingular}","a11yCheckboxSelectAllSingle":"Select {resourceNameSingular}","a11yCheckboxDeselectAllMultiple":"Deselect all {itemsLength} {resourceNamePlural}","a11yCheckboxSelectAllMultiple":"Select all {itemsLength} {resourceNamePlural}","Item":{"actionsDropdownLabel":"Actions for {accessibilityLabel}","actionsDropdown":"Actions dropdown","viewItem":"View details for {itemName}"},"BulkActions":{"actionsActivatorLabel":"Actions","moreActionsActivatorLabel":"More actions"}},"SkeletonPage":{"loadingLabel":"Page loading"},"Tabs":{"newViewAccessibilityLabel":"Create new view","newViewTooltip":"Create view","toggleTabsLabel":"More views","Tab":{"rename":"Rename view","duplicate":"Duplicate view","edit":"Edit view","editColumns":"Edit columns","delete":"Delete view","copy":"Copy of {name}","deleteModal":{"title":"Delete view?","description":"This can’t be undone. {viewName} view will no longer be available in your admin.","cancel":"Cancel","delete":"Delete view"}},"RenameModal":{"title":"Rename view","label":"Name","cancel":"Cancel","create":"Save","errors":{"sameName":"A view with this name already exists. Please choose a different name."}},"DuplicateModal":{"title":"Duplicate view","label":"Name","cancel":"Cancel","create":"Create view","errors":{"sameName":"A view with this name already exists. Please choose a different name."}},"CreateViewModal":{"title":"Create new view","label":"Name","cancel":"Cancel","create":"Create view","errors":{"sameName":"A view with this name already exists. Please choose a different name."}}},"Tag":{"ariaLabel":"Remove {children}"},"TextField":{"characterCount":"{count} characters","characterCountWithMaxLength":"{count} of {limit} characters used"},"TooltipOverlay":{"accessibilityLabel":"Tooltip: {label}"},"TopBar":{"toggleMenuLabel":"Toggle menu","SearchField":{"clearButtonLabel":"Clear","search":"Search"}},"MediaCard":{"dismissButton":"Dismiss","popoverButton":"Actions"},"VideoThumbnail":{"playButtonA11yLabel":{"default":"Play video","defaultWithDuration":"Play video of length {duration}","duration":{"hours":{"other":{"only":"{hourCount} hours","andMinutes":"{hourCount} hours and {minuteCount} minutes","andMinute":"{hourCount} hours and {minuteCount} minute","minutesAndSeconds":"{hourCount} hours, {minuteCount} minutes, and {secondCount} seconds","minutesAndSecond":"{hourCount} hours, {minuteCount} minutes, and {secondCount} second","minuteAndSeconds":"{hourCount} hours, {minuteCount} minute, and {secondCount} seconds","minuteAndSecond":"{hourCount} hours, {minuteCount} minute, and {secondCount} second","andSeconds":"{hourCount} hours and {secondCount} seconds","andSecond":"{hourCount} hours and {secondCount} second"},"one":{"only":"{hourCount} hour","andMinutes":"{hourCount} hour and {minuteCount} minutes","andMinute":"{hourCount} hour and {minuteCount} minute","minutesAndSeconds":"{hourCount} hour, {minuteCount} minutes, and {secondCount} seconds","minutesAndSecond":"{hourCount} hour, {minuteCount} minutes, and {secondCount} second","minuteAndSeconds":"{hourCount} hour, {minuteCount} minute, and {secondCount} seconds","minuteAndSecond":"{hourCount} hour, {minuteCount} minute, and {secondCount} second","andSeconds":"{hourCount} hour and {secondCount} seconds","andSecond":"{hourCount} hour and {secondCount} second"}},"minutes":{"other":{"only":"{minuteCount} minutes","andSeconds":"{minuteCount} minutes and {secondCount} seconds","andSecond":"{minuteCount} minutes and {secondCount} second"},"one":{"only":"{minuteCount} minute","andSeconds":"{minuteCount} minute and {secondCount} seconds","andSecond":"{minuteCount} minute and {secondCount} second"}},"seconds":{"other":"{secondCount} seconds","one":"{secondCount} second"}}}}}');
@@ -3638,7 +3663,7 @@ function ToggleSwitch({ checked, onChange }) {
   );
 }
 function GlbPartSetup({ glbUrl, parts, selectedPartId, onPartSelect, onGlbUploaded, onPartsChange }) {
-  var _a2, _b, _c;
+  var _a, _b, _c;
   const fetcher = useFetcher();
   const fileInputRef = useRef(null);
   const [extracting, setExtracting] = useState(false);
@@ -3647,8 +3672,8 @@ function GlbPartSetup({ glbUrl, parts, selectedPartId, onPartSelect, onGlbUpload
   const [editingId, setEditingId] = useState(null);
   const isUploading = fetcher.state !== "idle";
   function handleFileChange(e) {
-    var _a3;
-    const file = (_a3 = e.target.files) == null ? void 0 : _a3[0];
+    var _a2;
+    const file = (_a2 = e.target.files) == null ? void 0 : _a2[0];
     if (!file) return;
     setExtractError(null);
     const fd = new FormData();
@@ -3656,8 +3681,8 @@ function GlbPartSetup({ glbUrl, parts, selectedPartId, onPartSelect, onGlbUpload
     fetcher.submit(fd, { method: "post", action: "/app/upload-glb", encType: "multipart/form-data" });
   }
   useEffect(() => {
-    var _a3;
-    const url = (_a3 = fetcher.data) == null ? void 0 : _a3.url;
+    var _a2;
+    const url = (_a2 = fetcher.data) == null ? void 0 : _a2.url;
     if (!url || url === processedUrl.current) return;
     processedUrl.current = url;
     setExtracting(true);
@@ -3672,7 +3697,7 @@ function GlbPartSetup({ glbUrl, parts, selectedPartId, onPartSelect, onGlbUpload
       }));
       onGlbUploaded(url, newParts);
     }).catch((err) => setExtractError("Could not read mesh names: " + ((err == null ? void 0 : err.message) ?? "unknown error"))).finally(() => setExtracting(false));
-  }, [(_a2 = fetcher.data) == null ? void 0 : _a2.url]);
+  }, [(_a = fetcher.data) == null ? void 0 : _a.url]);
   function updatePartName(partId, newName) {
     onPartsChange(parts.map((p) => p.id === partId ? { ...p, name: newName } : p));
   }
@@ -3703,8 +3728,8 @@ function GlbPartSetup({ glbUrl, parts, selectedPartId, onPartSelect, onGlbUpload
       "div",
       {
         onClick: () => {
-          var _a3;
-          return !isBusy && ((_a3 = fileInputRef.current) == null ? void 0 : _a3.click());
+          var _a2;
+          return !isBusy && ((_a2 = fileInputRef.current) == null ? void 0 : _a2.click());
         },
         style: {
           border: `2px dashed ${isBusy ? "#c4cdd6" : glbUrl ? "#4f46e5" : "#c4cdd6"}`,
@@ -3871,8 +3896,8 @@ function PartRow({
   const inputRef = useRef(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
   useEffect(() => {
-    var _a2;
-    if (isEditing) (_a2 = inputRef.current) == null ? void 0 : _a2.select();
+    var _a;
+    if (isEditing) (_a = inputRef.current) == null ? void 0 : _a.select();
   }, [isEditing]);
   useEffect(() => {
     if (!confirmDelete) return;
@@ -4037,25 +4062,7 @@ async function action$9({
   } = await authenticate.admin(request);
   const decodedId = decodeURIComponent(params.productId);
   const formData = await request.formData();
-  const intent = formData.get("intent");
-  if (intent === "updateProductStatus") {
-    const newStatus = formData.get("status");
-    await admin.graphql(`mutation UpdateProductStatus($id: ID!, $status: ProductStatus!) {
-        productUpdate(input: { id: $id, status: $status }) {
-          product { id status }
-          userErrors { field message }
-        }
-      }`, {
-      variables: {
-        id: decodedId,
-        status: newStatus
-      }
-    });
-    return {
-      statusUpdated: true,
-      status: newStatus
-    };
-  }
+  formData.get("intent");
   const layers = JSON.parse(formData.get("layers"));
   const questions = JSON.parse(formData.get("questions"));
   const logicRules = JSON.parse(formData.get("logicRules") ?? "[]");
@@ -4474,7 +4481,7 @@ function AddLayerModal({
   onAdd,
   onClose
 }) {
-  var _a2, _b;
+  var _a, _b;
   const [sel, setSel] = useState(null);
   return /* @__PURE__ */ jsx("div", {
     style: {
@@ -4583,7 +4590,7 @@ function AddLayerModal({
             fontSize: 12,
             color: "#6b7280"
           },
-          children: sel ? `Create a ${(_b = (_a2 = DISPLAY_TYPE_META[sel]) == null ? void 0 : _a2.label) == null ? void 0 : _b.toLowerCase()} layer` : "Please select a display type"
+          children: sel ? `Create a ${(_b = (_a = DISPLAY_TYPE_META[sel]) == null ? void 0 : _a.label) == null ? void 0 : _b.toLowerCase()} layer` : "Please select a display type"
         }), /* @__PURE__ */ jsx("button", {
           onClick: () => {
             if (sel) {
@@ -4609,7 +4616,7 @@ function AddLayerModal({
   });
 }
 function getQuestionIcon(q) {
-  var _a2, _b;
+  var _a, _b;
   const dt = q.displayType;
   if (q.type === "thumbnail" && dt === "image") return /* @__PURE__ */ jsx("span", {
     style: {
@@ -4633,7 +4640,7 @@ function getQuestionIcon(q) {
           width: 12,
           height: 12,
           borderRadius: "50%",
-          background: ((_b = (_a2 = q.swatches) == null ? void 0 : _a2[0]) == null ? void 0 : _b.value) ?? "#888",
+          background: ((_b = (_a = q.swatches) == null ? void 0 : _a[0]) == null ? void 0 : _b.value) ?? "#888",
           border: "1px solid rgba(0,0,0,0.1)",
           flexShrink: 0
         }
@@ -5260,16 +5267,16 @@ function SwatchRow({
   onRemove,
   onImageUpload
 }) {
-  var _a2;
+  var _a;
   const fetcher = useFetcher();
   const uploading = fetcher.state !== "idle";
   useEffect(() => {
-    var _a3;
-    if ((_a3 = fetcher.data) == null ? void 0 : _a3.url) onImageUpload(fetcher.data.url);
-  }, [(_a2 = fetcher.data) == null ? void 0 : _a2.url]);
+    var _a2;
+    if ((_a2 = fetcher.data) == null ? void 0 : _a2.url) onImageUpload(fetcher.data.url);
+  }, [(_a = fetcher.data) == null ? void 0 : _a.url]);
   const handleFile = (e) => {
-    var _a3;
-    const file = (_a3 = e.target.files) == null ? void 0 : _a3[0];
+    var _a2;
+    const file = (_a2 = e.target.files) == null ? void 0 : _a2[0];
     if (!file) return;
     const fd = new FormData();
     fd.append("file", file);
@@ -5370,16 +5377,16 @@ function ImageUploadSlot({
   label: label2,
   onUploaded
 }) {
-  var _a2, _b;
+  var _a, _b;
   const fetcher = useFetcher();
   const uploading = fetcher.state !== "idle";
   useEffect(() => {
-    var _a3;
-    if ((_a3 = fetcher.data) == null ? void 0 : _a3.url) onUploaded(fetcher.data.url);
-  }, [(_a2 = fetcher.data) == null ? void 0 : _a2.url]);
+    var _a2;
+    if ((_a2 = fetcher.data) == null ? void 0 : _a2.url) onUploaded(fetcher.data.url);
+  }, [(_a = fetcher.data) == null ? void 0 : _a.url]);
   const handleFile = (e) => {
-    var _a3;
-    const file = (_a3 = e.target.files) == null ? void 0 : _a3[0];
+    var _a2;
+    const file = (_a2 = e.target.files) == null ? void 0 : _a2[0];
     if (!file) return;
     const fd = new FormData();
     fd.append("file", file);
@@ -5669,7 +5676,7 @@ function AnswerDetailPanel({
       children: Array.from({
         length: numViews
       }).map((_, vi) => {
-        var _a2;
+        var _a;
         return /* @__PURE__ */ jsxs("div", {
           style: {
             marginBottom: 10
@@ -5685,7 +5692,7 @@ function AnswerDetailPanel({
             children: ["View ", vi + 1]
           }), /* @__PURE__ */ jsx(ImageUploadSlot, {
             label: "",
-            currentUrl: ((_a2 = swatch.viewImages) == null ? void 0 : _a2[vi]) ?? null,
+            currentUrl: ((_a = swatch.viewImages) == null ? void 0 : _a[vi]) ?? null,
             onUploaded: (url) => setViewImage(vi, url)
           })]
         }, vi);
@@ -6002,7 +6009,7 @@ function ThumbnailEditor({
   onSwitchType,
   onPreview
 }) {
-  var _a2, _b;
+  var _a, _b;
   const [answerMenu, setAnswerMenu] = useState(null);
   const [showApplyPicker, setShowApplyPicker] = useState(false);
   const [applySearchColor, setApplySearchColor] = useState("");
@@ -6557,7 +6564,7 @@ function ThumbnailEditor({
               color: "#6b7280",
               flexShrink: 0
             },
-            children: ((_a2 = DISPLAY_TYPE_META[displayType]) == null ? void 0 : _a2.icon) ?? "?"
+            children: ((_a = DISPLAY_TYPE_META[displayType]) == null ? void 0 : _a.icon) ?? "?"
           }), /* @__PURE__ */ jsx("span", {
             style: {
               flex: 1,
@@ -6774,10 +6781,10 @@ function ThumbnailEditor({
             })]
           })]
         }), linkedIds.map((lid) => {
-          var _a3;
+          var _a2;
           const linkedQ = questions.find((oq) => oq.id === lid);
           const linkedL = !linkedQ ? layers.find((l) => l.id === lid) : null;
-          const linkedName = (_a3 = linkedQ || linkedL) == null ? void 0 : _a3.name;
+          const linkedName = (_a2 = linkedQ || linkedL) == null ? void 0 : _a2.name;
           if (!linkedName) return null;
           return /* @__PURE__ */ jsxs("div", {
             style: {
@@ -8908,7 +8915,7 @@ function PrintAreaPanel({
   onChange,
   onViewChange
 }) {
-  var _a2;
+  var _a;
   const [showClipPicker, setShowClipPicker] = useState(false);
   const toggleView = (v) => {
     const next = area.visibleViews.includes(v) ? area.visibleViews.filter((x) => x !== v) : [...area.visibleViews, v];
@@ -9313,7 +9320,7 @@ function PrintAreaPanel({
               textAlign: "left",
               color: area.clipToLayerId ? "#374151" : "#9ca3af"
             },
-            children: area.clipToLayerId ? ((_a2 = layers.find((l) => l.id === area.clipToLayerId)) == null ? void 0 : _a2.name) ?? "Unknown" : "None"
+            children: area.clipToLayerId ? ((_a = layers.find((l) => l.id === area.clipToLayerId)) == null ? void 0 : _a.name) ?? "Unknown" : "None"
           }), /* @__PURE__ */ jsx("span", {
             style: {
               fontSize: 10,
@@ -9575,7 +9582,7 @@ function DropdownEditor({
             children: "+ Add first answer"
           })]
         }), q.options.map((opt, idx) => {
-          var _a2, _b;
+          var _a, _b;
           return /* @__PURE__ */ jsxs("div", {
             draggable: true,
             onDragStart: () => handleDragStart(idx),
@@ -9608,7 +9615,7 @@ function DropdownEditor({
                   userSelect: "none"
                 },
                 children: "⠿"
-              }), opt.thumbnailUrl || ((_a2 = opt.viewImages) == null ? void 0 : _a2.find(Boolean)) ? /* @__PURE__ */ jsx("img", {
+              }), opt.thumbnailUrl || ((_a = opt.viewImages) == null ? void 0 : _a.find(Boolean)) ? /* @__PURE__ */ jsx("img", {
                 src: opt.thumbnailUrl ?? ((_b = opt.viewImages) == null ? void 0 : _b.find(Boolean)) ?? "",
                 alt: opt.label,
                 style: {
@@ -10122,7 +10129,7 @@ function LabelAnswerDetailPanel({
       children: Array.from({
         length: numViews
       }).map((_, vi) => {
-        var _a2;
+        var _a;
         return /* @__PURE__ */ jsxs("div", {
           style: {
             marginBottom: 10
@@ -10138,7 +10145,7 @@ function LabelAnswerDetailPanel({
             children: ["View ", vi + 1]
           }), /* @__PURE__ */ jsx(ImageUploadSlot, {
             label: "",
-            currentUrl: ((_a2 = answer.viewImages) == null ? void 0 : _a2[vi]) ?? null,
+            currentUrl: ((_a = answer.viewImages) == null ? void 0 : _a[vi]) ?? null,
             onUploaded: (url) => setViewImage(vi, url)
           })]
         }, vi);
@@ -10277,10 +10284,10 @@ function LabelEditor({
   };
   const displayTypes = DISPLAY_TYPE_MAP["label"];
   const openAnswerDetail = (idx) => {
-    var _a2;
+    var _a;
     setEditingIdx(idx);
     const ans = answers[idx];
-    onAnswerPreview == null ? void 0 : onAnswerPreview(((_a2 = ans == null ? void 0 : ans.viewImages) == null ? void 0 : _a2.some(Boolean)) ? ans.viewImages : null);
+    onAnswerPreview == null ? void 0 : onAnswerPreview(((_a = ans == null ? void 0 : ans.viewImages) == null ? void 0 : _a.some(Boolean)) ? ans.viewImages : null);
   };
   const closeAnswerDetail = () => {
     setEditingIdx(null);
@@ -10303,12 +10310,12 @@ function LabelEditor({
     openAnswerDetail(next.length - 1);
   };
   const updateAnswer = (idx, updated) => {
-    var _a2;
+    var _a;
     onChange({
       ...q,
       answers: answers.map((a, i) => i === idx ? updated : a)
     });
-    onAnswerPreview == null ? void 0 : onAnswerPreview(((_a2 = updated.viewImages) == null ? void 0 : _a2.some(Boolean)) ? updated.viewImages : null);
+    onAnswerPreview == null ? void 0 : onAnswerPreview(((_a = updated.viewImages) == null ? void 0 : _a.some(Boolean)) ? updated.viewImages : null);
   };
   const removeAnswer = (idx) => {
     onChange({
@@ -10430,7 +10437,7 @@ function LabelEditor({
           children: "+ Add first answer"
         })]
       }), answers.map((a, idx) => {
-        var _a2, _b;
+        var _a, _b;
         return /* @__PURE__ */ jsxs("div", {
           style: {
             position: "relative",
@@ -10449,7 +10456,7 @@ function LabelEditor({
               cursor: "pointer",
               background: "#fafafa"
             },
-            children: [a.imageUrl ?? ((_a2 = a.viewImages) == null ? void 0 : _a2.find(Boolean)) ? /* @__PURE__ */ jsx("img", {
+            children: [a.imageUrl ?? ((_a = a.viewImages) == null ? void 0 : _a.find(Boolean)) ? /* @__PURE__ */ jsx("img", {
               src: a.imageUrl ?? ((_b = a.viewImages) == null ? void 0 : _b.find(Boolean)),
               alt: "",
               style: {
@@ -10953,16 +10960,16 @@ function ViewUploadSlot({
   onUploaded,
   onUrlChange
 }) {
-  var _a2, _b;
+  var _a, _b;
   const fetcher = useFetcher();
   const uploading = fetcher.state !== "idle";
   useEffect(() => {
-    var _a3;
-    if ((_a3 = fetcher.data) == null ? void 0 : _a3.url) onUploaded(fetcher.data.url);
-  }, [(_a2 = fetcher.data) == null ? void 0 : _a2.url]);
+    var _a2;
+    if ((_a2 = fetcher.data) == null ? void 0 : _a2.url) onUploaded(fetcher.data.url);
+  }, [(_a = fetcher.data) == null ? void 0 : _a.url]);
   const handleFile = (e) => {
-    var _a3;
-    const file = (_a3 = e.target.files) == null ? void 0 : _a3[0];
+    var _a2;
+    const file = (_a2 = e.target.files) == null ? void 0 : _a2[0];
     if (!file) return;
     const fd = new FormData();
     fd.append("file", file);
@@ -11347,7 +11354,7 @@ function LayerAnswerDetail({
   onBack,
   onChange
 }) {
-  var _a2;
+  var _a;
   const isColor = displayType === "color" || displayType === "text-color";
   const setViewImage = (vi, url) => {
     const views = [...answer.viewImages ?? Array(numViews).fill(null)];
@@ -11410,7 +11417,7 @@ function LayerAnswerDetail({
       children: Array.from({
         length: numViews
       }).map((_, vi) => {
-        var _a3;
+        var _a2;
         return /* @__PURE__ */ jsxs("div", {
           style: {
             marginBottom: 10
@@ -11426,7 +11433,7 @@ function LayerAnswerDetail({
             children: ["View ", vi + 1]
           }), /* @__PURE__ */ jsx(ImageUploadSlot, {
             label: "",
-            currentUrl: ((_a3 = answer.viewImages) == null ? void 0 : _a3[vi]) ?? null,
+            currentUrl: ((_a2 = answer.viewImages) == null ? void 0 : _a2[vi]) ?? null,
             onUploaded: (url) => setViewImage(vi, url)
           })]
         }, vi);
@@ -11439,7 +11446,7 @@ function LayerAnswerDetail({
         style: labelSt,
         children: "Color"
       }), /* @__PURE__ */ jsx(ModernColorPicker, {
-        value: ((_a2 = answer.value) == null ? void 0 : _a2.startsWith("#")) ? answer.value : "#000000",
+        value: ((_a = answer.value) == null ? void 0 : _a.startsWith("#")) ? answer.value : "#000000",
         onChange: (hex) => onChange({
           ...answer,
           value: hex
@@ -11660,7 +11667,7 @@ function NewLayerEditor({
   onAddLinkedLayer,
   onAnswerPreview
 }) {
-  var _a2, _b;
+  var _a, _b;
   const [editingIdx, setEditingIdx] = useState(null);
   const setEditingIdxAndNotify = (idx) => {
     setEditingIdx(idx);
@@ -12204,7 +12211,7 @@ function NewLayerEditor({
                 color: "#fff",
                 flexShrink: 0
               },
-              children: ((_a2 = DISPLAY_TYPE_META[applyConf.targetDT]) == null ? void 0 : _a2.icon) ?? "?"
+              children: ((_a = DISPLAY_TYPE_META[applyConf.targetDT]) == null ? void 0 : _a.icon) ?? "?"
             }), /* @__PURE__ */ jsx("span", {
               children: applyConf.label
             }), /* @__PURE__ */ jsx("span", {
@@ -12302,7 +12309,7 @@ function NewLayerEditor({
                 },
                 children: "No matching questions"
               }), filteredApplyQuestions.map((q) => {
-                var _a3;
+                var _a2;
                 return /* @__PURE__ */ jsxs("button", {
                   onClick: () => {
                     onChange({
@@ -12337,7 +12344,7 @@ function NewLayerEditor({
                       color: "#fff",
                       flexShrink: 0
                     },
-                    children: ((_a3 = DISPLAY_TYPE_META[applyConf.targetDT]) == null ? void 0 : _a3.icon) ?? "?"
+                    children: ((_a2 = DISPLAY_TYPE_META[applyConf.targetDT]) == null ? void 0 : _a2.icon) ?? "?"
                   }), /* @__PURE__ */ jsx("span", {
                     style: {
                       flex: 1,
@@ -12522,9 +12529,9 @@ function OldLayerEditor({
     });
   };
   const getViewUrl = (viewIndex) => {
-    var _a2;
+    var _a;
     if (viewIndex === 0) return layer.src;
-    return ((_a2 = layer.extraViews) == null ? void 0 : _a2[viewIndex - 1]) ?? "";
+    return ((_a = layer.extraViews) == null ? void 0 : _a[viewIndex - 1]) ?? "";
   };
   return /* @__PURE__ */ jsxs("div", {
     style: {
@@ -12920,11 +12927,11 @@ function LogicRuleEditor({
   onCancel,
   initialRule
 }) {
-  var _a2, _b;
+  var _a, _b;
   const firstCond = initialRule == null ? void 0 : initialRule.conditions[0];
   const firstAction = initialRule == null ? void 0 : initialRule.actions[0];
   const behindLayers = layers.filter((l) => l.type !== "glb-part");
-  const defaultId = ((_a2 = questions[0]) == null ? void 0 : _a2.id) ?? ((_b = behindLayers[0]) == null ? void 0 : _b.id) ?? "";
+  const defaultId = ((_a = questions[0]) == null ? void 0 : _a.id) ?? ((_b = behindLayers[0]) == null ? void 0 : _b.id) ?? "";
   const [condQId, setCondQId] = useState((firstCond == null ? void 0 : firstCond.questionId) ?? defaultId);
   const [condOp, setCondOp] = useState((firstCond == null ? void 0 : firstCond.operator) ?? "is");
   const [condVal, setCondVal] = useState((firstCond == null ? void 0 : firstCond.value) ?? "");
@@ -13136,13 +13143,13 @@ function LogicRuleEditor({
 }
 function ruleToText(rule, questions, layers = []) {
   const getQName = (id) => {
-    var _a2, _b;
-    return ((_a2 = questions.find((q) => q.id === id)) == null ? void 0 : _a2.name) ?? ((_b = layers.find((l) => l.id === id)) == null ? void 0 : _b.name) ?? id;
+    var _a, _b;
+    return ((_a = questions.find((q) => q.id === id)) == null ? void 0 : _a.name) ?? ((_b = layers.find((l) => l.id === id)) == null ? void 0 : _b.name) ?? id;
   };
   const getAnswerLabel = (qId, val) => {
-    var _a2, _b, _c;
+    var _a, _b, _c;
     const q = questions.find((q2) => q2.id === qId);
-    if (q) return ((_a2 = getQuestionAnswers(q).find((a) => a.value === val)) == null ? void 0 : _a2.label) ?? val;
+    if (q) return ((_a = getQuestionAnswers(q).find((a) => a.value === val)) == null ? void 0 : _a.label) ?? val;
     const l = layers.find((l2) => l2.id === qId);
     return ((_c = (_b = l == null ? void 0 : l.answers) == null ? void 0 : _b.find((a) => a.id === val)) == null ? void 0 : _c.label) ?? val;
   };
@@ -13554,8 +13561,8 @@ function TextCanvasToolbar({
           overflow: "visible"
         },
         onClick: () => {
-          var _a2;
-          return (_a2 = document.getElementById(`tbar-color-${tq.id}`)) == null ? void 0 : _a2.click();
+          var _a;
+          return (_a = document.getElementById(`tbar-color-${tq.id}`)) == null ? void 0 : _a.click();
         },
         title: "Text color",
         children: [/* @__PURE__ */ jsx("span", {
@@ -13727,9 +13734,6 @@ const app_configuratorSetup_$productId = UNSAFE_withComponentProps(function Buil
   const [modelMode, setModelMode] = useState((existingOptions == null ? void 0 : existingOptions.modelMode) ?? false);
   const [glbUrl, setGlbUrl] = useState(existingOptions == null ? void 0 : existingOptions.glbUrl);
   const [customTitle, setCustomTitle] = useState(product.title ?? "");
-  const [productStatus, setProductStatus] = useState(product.status ?? "DRAFT");
-  const [showStatusMenu, setShowStatusMenu] = useState(false);
-  const statusFetcher = useFetcher();
   const [canvasW, setCanvasW] = useState((existingOptions == null ? void 0 : existingOptions.canvasW) ?? CANVAS_SIZE$1);
   const [canvasH, setCanvasH] = useState((existingOptions == null ? void 0 : existingOptions.canvasH) ?? CANVAS_SIZE$1);
   const [layers, setLayers] = useState((config == null ? void 0 : config.layers) ?? []);
@@ -13869,12 +13873,6 @@ const app_configuratorSetup_$productId = UNSAFE_withComponentProps(function Buil
     setMounted(true);
   }, []);
   useEffect(() => {
-    var _a2;
-    if (((_a2 = statusFetcher.data) == null ? void 0 : _a2.statusUpdated) && statusFetcher.data.status) {
-      setProductStatus(statusFetcher.data.status);
-    }
-  }, [statusFetcher.data]);
-  useEffect(() => {
     setAnswerEditState(null);
     setEditingPrintAreaId(null);
     if ((selected == null ? void 0 : selected.kind) === "question") {
@@ -13945,7 +13943,7 @@ const app_configuratorSetup_$productId = UNSAFE_withComponentProps(function Buil
     return result;
   }, [layers, canvasColors, canvasTextures]);
   const canvasImageOverrides = useMemo(() => {
-    var _a2;
+    var _a;
     const o = {};
     for (const q of questions) {
       if (q.type !== "thumbnail" || (q.displayType ?? "image") !== "image") continue;
@@ -13956,7 +13954,7 @@ const app_configuratorSetup_$productId = UNSAFE_withComponentProps(function Buil
       const picked = selectedSwatches[q.id];
       if (!picked) continue;
       const swatch = q.swatches.find((s) => s.value === picked);
-      if ((_a2 = swatch == null ? void 0 : swatch.viewImages) == null ? void 0 : _a2.length) {
+      if ((_a = swatch == null ? void 0 : swatch.viewImages) == null ? void 0 : _a.length) {
         const viewArr = swatch.viewImages.map((v) => v || "");
         for (const lid of layerIds) o[lid] = viewArr;
       }
@@ -13976,13 +13974,13 @@ const app_configuratorSetup_$productId = UNSAFE_withComponentProps(function Buil
   const transformerRef = useRef(null);
   const printAreaTransformerRef = useRef(null);
   useEffect(() => {
-    var _a2, _b, _c, _d, _e, _f;
+    var _a, _b, _c, _d, _e, _f;
     const selQ2 = (selected == null ? void 0 : selected.kind) === "question" ? questions.find((q) => q.id === selected.id) : null;
     const isTextWithPA = (selQ2 == null ? void 0 : selQ2.type) === "text" && !!selQ2.printArea;
     const isTextNoPA = (selQ2 == null ? void 0 : selQ2.type) === "text" && !selQ2.printArea;
     const isLogo = (selQ2 == null ? void 0 : selQ2.type) === "file" && selQ2.displayType === "logo";
     if (isTextWithPA) {
-      (_a2 = transformerRef.current) == null ? void 0 : _a2.nodes([]);
+      (_a = transformerRef.current) == null ? void 0 : _a.nodes([]);
       (_c = (_b = transformerRef.current) == null ? void 0 : _b.getLayer()) == null ? void 0 : _c.batchDraw();
     } else if (isTextNoPA && transformerRef.current && textNodeRefs.current[selQ2.id]) {
       transformerRef.current.nodes([textNodeRefs.current[selQ2.id]]);
@@ -13996,11 +13994,11 @@ const app_configuratorSetup_$productId = UNSAFE_withComponentProps(function Buil
     }
   }, [selected, questions]);
   useEffect(() => {
-    var _a2;
+    var _a;
     if (!printAreaTransformerRef.current) return;
     const node = editingPrintAreaId ? printAreaGroupRefs.current[editingPrintAreaId] : null;
     printAreaTransformerRef.current.nodes(node ? [node] : []);
-    (_a2 = printAreaTransformerRef.current.getLayer()) == null ? void 0 : _a2.batchDraw();
+    (_a = printAreaTransformerRef.current.getLayer()) == null ? void 0 : _a.batchDraw();
   }, [editingPrintAreaId, selected]);
   const updateQ = (u) => setQuestions((p) => p.map((q) => q.id === u.id ? u : q));
   const removeQ = (id) => {
@@ -14371,8 +14369,8 @@ const app_configuratorSetup_$productId = UNSAFE_withComponentProps(function Buil
     if ((selected == null ? void 0 : selected.id) === id) setSelected(null);
   };
   const addNewLayer = (layerType, displayType) => {
-    var _a2;
-    const baseName = ((_a2 = DISPLAY_TYPE_META[displayType]) == null ? void 0 : _a2.label) ?? displayType;
+    var _a;
+    const baseName = ((_a = DISPLAY_TYPE_META[displayType]) == null ? void 0 : _a.label) ?? displayType;
     const id = `${displayType}-${Date.now()}`;
     setLayers((p) => [...p, {
       id,
@@ -14388,7 +14386,7 @@ const app_configuratorSetup_$productId = UNSAFE_withComponentProps(function Buil
     });
   };
   const addLinkedLayer = (displayType, sourceId) => {
-    var _a2;
+    var _a;
     if (displayType === "color") {
       const existing = questions.find((q) => q.type === "thumbnail" && q.displayType === "color" && (q.applyOn ?? []).includes(sourceId));
       if (existing) {
@@ -14415,7 +14413,7 @@ const app_configuratorSetup_$productId = UNSAFE_withComponentProps(function Buil
       });
       return;
     }
-    const baseName = ((_a2 = DISPLAY_TYPE_META[displayType]) == null ? void 0 : _a2.label) ?? displayType;
+    const baseName = ((_a = DISPLAY_TYPE_META[displayType]) == null ? void 0 : _a.label) ?? displayType;
     const id = `${displayType}-${Date.now()}`;
     const count = layers.filter((l) => l.displayType === displayType).length + 1;
     setLayers((p) => [...p, {
@@ -14599,13 +14597,13 @@ const app_configuratorSetup_$productId = UNSAFE_withComponentProps(function Buil
     } : l));
   };
   const handleSave = () => {
-    var _a2;
+    var _a;
     const fd = new FormData();
     fd.append("layers", JSON.stringify(layers));
     fd.append("questions", JSON.stringify(questions));
     fd.append("logicRules", JSON.stringify(logicRules));
     fd.append("productName", customTitle || product.title);
-    fd.append("productImageUrl", ((_a2 = product.featuredImage) == null ? void 0 : _a2.url) || "");
+    fd.append("productImageUrl", ((_a = product.featuredImage) == null ? void 0 : _a.url) || "");
     fd.append("productHandle", product.handle || "");
     fd.append("numViews", String(numViews));
     fd.append("viewNames", JSON.stringify(viewNames));
@@ -14655,16 +14653,15 @@ const app_configuratorSetup_$productId = UNSAFE_withComponentProps(function Buil
         overflow: "hidden",
         background: "#fff"
       },
-      children: [/* @__PURE__ */ jsxs("div", {
+      children: [/* @__PURE__ */ jsx("div", {
         style: {
           padding: "8px 12px 6px",
           display: "flex",
           alignItems: "center",
-          justifyContent: "space-between",
           background: "#fafafa",
           borderBottom: "1px solid #f3f4f6"
         },
-        children: [/* @__PURE__ */ jsxs(Link, {
+        children: /* @__PURE__ */ jsxs(Link, {
           to: "/app/products",
           style: {
             fontSize: 12,
@@ -14688,94 +14685,7 @@ const app_configuratorSetup_$productId = UNSAFE_withComponentProps(function Buil
               strokeLinejoin: "round"
             })
           }), "Products"]
-        }), /* @__PURE__ */ jsxs("div", {
-          style: {
-            position: "relative"
-          },
-          children: [/* @__PURE__ */ jsxs("button", {
-            onClick: () => setShowStatusMenu((v) => !v),
-            disabled: statusFetcher.state !== "idle",
-            style: {
-              display: "inline-flex",
-              alignItems: "center",
-              gap: 4,
-              padding: "2px 8px",
-              borderRadius: 10,
-              border: "none",
-              cursor: "pointer",
-              fontSize: 11,
-              fontWeight: 600,
-              lineHeight: 1.6,
-              background: productStatus === "ACTIVE" ? "#d1fae5" : "#f3f4f6",
-              color: productStatus === "ACTIVE" ? "#065f46" : "#6b7280",
-              opacity: statusFetcher.state !== "idle" ? 0.6 : 1
-            },
-            children: [/* @__PURE__ */ jsx("span", {
-              style: {
-                width: 5,
-                height: 5,
-                borderRadius: "50%",
-                background: productStatus === "ACTIVE" ? "#10b981" : "#9ca3af",
-                display: "inline-block"
-              }
-            }), statusFetcher.state !== "idle" ? "…" : productStatus === "ACTIVE" ? "Active" : "Draft"]
-          }), showStatusMenu && /* @__PURE__ */ jsx("div", {
-            style: {
-              position: "absolute",
-              top: "calc(100% + 4px)",
-              right: 0,
-              zIndex: 100,
-              background: "#fff",
-              border: "1px solid #e5e7eb",
-              borderRadius: 8,
-              boxShadow: "0 4px 12px rgba(0,0,0,0.12)",
-              minWidth: 130,
-              overflow: "hidden"
-            },
-            onMouseLeave: () => setShowStatusMenu(false),
-            children: ["ACTIVE", "DRAFT"].map((s) => /* @__PURE__ */ jsxs("button", {
-              disabled: productStatus === s,
-              onClick: () => {
-                setShowStatusMenu(false);
-                const fd = new FormData();
-                fd.append("intent", "updateProductStatus");
-                fd.append("status", s);
-                statusFetcher.submit(fd, {
-                  method: "post"
-                });
-              },
-              style: {
-                display: "flex",
-                alignItems: "center",
-                gap: 8,
-                width: "100%",
-                padding: "8px 12px",
-                border: "none",
-                background: productStatus === s ? "#f9fafb" : "#fff",
-                cursor: productStatus === s ? "default" : "pointer",
-                fontSize: 12,
-                color: productStatus === s ? "#9ca3af" : "#111827",
-                textAlign: "left"
-              },
-              children: [/* @__PURE__ */ jsx("span", {
-                style: {
-                  width: 6,
-                  height: 6,
-                  borderRadius: "50%",
-                  background: s === "ACTIVE" ? "#10b981" : "#9ca3af",
-                  flexShrink: 0
-                }
-              }), s === "ACTIVE" ? "Active" : "Draft", productStatus === s && /* @__PURE__ */ jsx("span", {
-                style: {
-                  marginLeft: "auto",
-                  fontSize: 10,
-                  color: "#9ca3af"
-                },
-                children: "current"
-              })]
-            }, s))
-          })]
-        })]
+        })
       }), /* @__PURE__ */ jsxs("div", {
         style: {
           padding: "10px 12px",
@@ -15260,7 +15170,7 @@ const app_configuratorSetup_$productId = UNSAFE_withComponentProps(function Buil
               }), (() => {
                 const childIdsInGroups = new Set(questions.filter((q) => q.type === "group").flatMap((q) => q.childIds));
                 return questions.map((q, idx) => {
-                  var _a2;
+                  var _a;
                   if (childIdsInGroups.has(q.id)) return null;
                   if (q.type === "group") {
                     const gq = q;
@@ -15287,7 +15197,7 @@ const app_configuratorSetup_$productId = UNSAFE_withComponentProps(function Buil
                         onDrop: () => handleQDrop(q.id),
                         onDragEnd: handleQDragEnd
                       }), isExpanded && gq.childIds.map((childId) => {
-                        var _a3;
+                        var _a2;
                         const child = questions.find((oq) => oq.id === childId);
                         if (!child) return null;
                         return /* @__PURE__ */ jsx("div", {
@@ -15299,7 +15209,7 @@ const app_configuratorSetup_$productId = UNSAFE_withComponentProps(function Buil
                           children: /* @__PURE__ */ jsx(QuestionRow, {
                             q: child,
                             selected: (selected == null ? void 0 : selected.id) === child.id,
-                            layerName: child.type === "color" || child.type === "thumbnail" ? (_a3 = layers.find((l) => l.id === child.linkedLayerId)) == null ? void 0 : _a3.name : void 0,
+                            layerName: child.type === "color" || child.type === "thumbnail" ? (_a2 = layers.find((l) => l.id === child.linkedLayerId)) == null ? void 0 : _a2.name : void 0,
                             onSelect: () => setSelected({
                               kind: "question",
                               id: child.id
@@ -15321,7 +15231,7 @@ const app_configuratorSetup_$productId = UNSAFE_withComponentProps(function Buil
                     children: [/* @__PURE__ */ jsx(QuestionRow, {
                       q,
                       selected: (selected == null ? void 0 : selected.id) === q.id,
-                      layerName: q.type === "color" || q.type === "thumbnail" ? (_a2 = layers.find((l) => l.id === q.linkedLayerId)) == null ? void 0 : _a2.name : void 0,
+                      layerName: q.type === "color" || q.type === "thumbnail" ? (_a = layers.find((l) => l.id === q.linkedLayerId)) == null ? void 0 : _a.name : void 0,
                       onSelect: () => {
                         setSelected({
                           kind: "question",
@@ -15416,12 +15326,12 @@ const app_configuratorSetup_$productId = UNSAFE_withComponentProps(function Buil
               },
               children: layers.filter((l) => l.type !== "glb-part").map((l, idx) => {
                 const forwardNames = (l.applyOn ?? []).map((qid) => {
-                  var _a2;
-                  return (_a2 = questions.find((q) => q.id === qid)) == null ? void 0 : _a2.name;
+                  var _a;
+                  return (_a = questions.find((q) => q.id === qid)) == null ? void 0 : _a.name;
                 }).filter(Boolean);
                 const reverseNames = questions.filter((q) => {
-                  var _a2;
-                  return (_a2 = q.applyOn) == null ? void 0 : _a2.includes(l.id);
+                  var _a;
+                  return (_a = q.applyOn) == null ? void 0 : _a.includes(l.id);
                 }).map((q) => q.name);
                 const allLinkedNames = [.../* @__PURE__ */ new Set([...forwardNames, ...reverseNames])];
                 return /* @__PURE__ */ jsx(LayerRow, {
@@ -16190,8 +16100,8 @@ const app_configuratorSetup_$productId = UNSAFE_withComponentProps(function Buil
           displayType: "image",
           onDone: () => setAnswerEditState(null),
           onChange: (updated) => {
-            var _a2;
-            const firstViewImg = ((_a2 = updated.viewImages) == null ? void 0 : _a2.find(Boolean)) ?? null;
+            var _a;
+            const firstViewImg = ((_a = updated.viewImages) == null ? void 0 : _a.find(Boolean)) ?? null;
             const updatedOpt = {
               value: updated.value,
               label: updated.label,
@@ -17560,9 +17470,9 @@ async function loader$5({
   };
 }
 function isVisible(q, selectedAnswers, hiddenQuestions) {
-  var _a2;
+  var _a;
   if (hiddenQuestions == null ? void 0 : hiddenQuestions.has(q.id)) return false;
-  if (!((_a2 = q.conditions) == null ? void 0 : _a2.length)) return true;
+  if (!((_a = q.conditions) == null ? void 0 : _a.length)) return true;
   return q.conditions.every((c) => selectedAnswers[c.questionId] === c.value);
 }
 function getEffectiveLayerIds(q) {
@@ -17579,8 +17489,8 @@ function AdminImageDropdown({
   const [open, setOpen] = useState(false);
   const selectedOpts = q.options.filter((o) => selectedVals.includes(o.value));
   const getThumb = (o) => {
-    var _a2;
-    return o.thumbnailUrl ?? ((_a2 = o.viewImages) == null ? void 0 : _a2.find(Boolean)) ?? null;
+    var _a;
+    return o.thumbnailUrl ?? ((_a = o.viewImages) == null ? void 0 : _a.find(Boolean)) ?? null;
   };
   return /* @__PURE__ */ jsxs("div", {
     style: {
@@ -17674,10 +17584,10 @@ function AdminImageDropdown({
         marginTop: 4
       },
       children: q.options.map((o) => {
-        var _a2;
+        var _a;
         const thumb = getThumb(o);
         const isSelected = selectedVals.includes(o.value);
-        const hasViewImages = (_a2 = o.viewImages) == null ? void 0 : _a2.some(Boolean);
+        const hasViewImages = (_a = o.viewImages) == null ? void 0 : _a.some(Boolean);
         return /* @__PURE__ */ jsxs("button", {
           onClick: () => {
             onToggle(o.value);
@@ -17741,7 +17651,7 @@ function AdminImageDropdown({
   });
 }
 const app_configurator_$productId = UNSAFE_withComponentProps(function ConfiguratorPage() {
-  var _a2, _b;
+  var _a, _b;
   const {
     product,
     config,
@@ -17770,7 +17680,7 @@ const app_configurator_$productId = UNSAFE_withComponentProps(function Configura
   const [nodeRefs] = useState({});
   const layers = (config == null ? void 0 : config.layers) ?? [];
   const questions = migrateOptions(config == null ? void 0 : config.options, layers);
-  const logicRules = ((_a2 = config == null ? void 0 : config.options) == null ? void 0 : _a2.logicRules) ?? [];
+  const logicRules = ((_a = config == null ? void 0 : config.options) == null ? void 0 : _a.logicRules) ?? [];
   const numViews = ((_b = config == null ? void 0 : config.options) == null ? void 0 : _b.numViews) ?? 1;
   const [currentView, setCurrentView] = useState(0);
   const [selectedAnswers, setSelectedAnswers] = useState(() => {
@@ -17788,14 +17698,14 @@ const app_configurator_$productId = UNSAFE_withComponentProps(function Configura
   const [layerColors, setLayerColors] = useState({});
   const [layerTextures, setLayerTextures] = useState({});
   const [layerImageOverrides, setLayerImageOverrides] = useState(() => {
-    var _a3;
+    var _a2;
     const init = {};
     for (const q of questions) {
       if (q.type !== "thumbnail" || q.displayType !== "image") continue;
       const layerIds = getEffectiveLayerIds(q);
       if (!layerIds.length || !q.swatches.length) continue;
       const first = q.swatches[0];
-      if ((_a3 = first.viewImages) == null ? void 0 : _a3.length) {
+      if ((_a2 = first.viewImages) == null ? void 0 : _a2.length) {
         for (const lid of layerIds) init[lid] = first.viewImages.map((v) => v || "");
       }
     }
@@ -17844,11 +17754,11 @@ const app_configurator_$productId = UNSAFE_withComponentProps(function Configura
     return result;
   }, [layers, layerColors, layerTextures]);
   useEffect(() => {
-    var _a3;
+    var _a2;
     if (!transformerRef.current) return;
     const node = selectedId ? nodeRefs[selectedId] : null;
     transformerRef.current.nodes(node ? [node] : []);
-    (_a3 = transformerRef.current.getLayer()) == null ? void 0 : _a3.batchDraw();
+    (_a2 = transformerRef.current.getLayer()) == null ? void 0 : _a2.batchDraw();
   }, [selectedId, nodeRefs]);
   const handleFileUpload = (questionId, file) => {
     const fq = questions.find((q) => q.id === questionId);
@@ -18007,9 +17917,9 @@ const app_configurator_$productId = UNSAFE_withComponentProps(function Configura
   const textQuestions = questions.filter((q) => q.type === "text" && q.displayType !== "none" && isVisible(q, selectedAnswers, hiddenQuestions));
   const fileQuestions = questions.filter((q) => q.type === "file" && isVisible(q, selectedAnswers, hiddenQuestions));
   const visibleQuestions = questions.filter((q) => {
-    var _a3, _b2;
+    var _a2, _b2;
     if (!isVisible(q, selectedAnswers, hiddenQuestions)) return false;
-    if ((q.type === "radio" || q.type === "dropdown") && !((_a3 = q.options) == null ? void 0 : _a3.length)) return false;
+    if ((q.type === "radio" || q.type === "dropdown") && !((_a2 = q.options) == null ? void 0 : _a2.length)) return false;
     if ((q.type === "color" || q.type === "thumbnail") && !((_b2 = q.swatches) == null ? void 0 : _b2.length)) return false;
     return true;
   });
@@ -18089,7 +17999,7 @@ const app_configurator_$productId = UNSAFE_withComponentProps(function Configura
             if (labelAnswers.length > 0) {
               const activeVals = (selectedAnswers[q.id] ?? "").split(",").filter(Boolean);
               const toggleLabelAnswer = (val) => {
-                var _a3;
+                var _a2;
                 const newVal = activeVals[0] === val ? "" : val;
                 setSelectedAnswers((p) => ({
                   ...p,
@@ -18097,7 +18007,7 @@ const app_configurator_$productId = UNSAFE_withComponentProps(function Configura
                 }));
                 if (newVal) {
                   const ans = labelAnswers.find((a) => a.value === newVal);
-                  if ((_a3 = ans == null ? void 0 : ans.viewImages) == null ? void 0 : _a3.some(Boolean)) {
+                  if ((_a2 = ans == null ? void 0 : ans.viewImages) == null ? void 0 : _a2.some(Boolean)) {
                     setLabelAnswerImages((p) => ({
                       ...p,
                       [q.id]: ans.viewImages
@@ -18135,9 +18045,9 @@ const app_configurator_$productId = UNSAFE_withComponentProps(function Configura
                     gap: swatchGap
                   },
                   children: labelAnswers.map((a) => {
-                    var _a3;
+                    var _a2;
                     const isActive = activeVals.includes(a.value);
-                    const hasViewImages = (_a3 = a.viewImages) == null ? void 0 : _a3.some(Boolean);
+                    const hasViewImages = (_a2 = a.viewImages) == null ? void 0 : _a2.some(Boolean);
                     return /* @__PURE__ */ jsxs("button", {
                       onClick: () => toggleLabelAnswer(a.value),
                       onMouseEnter: () => hasViewImages ? setHoverViewImages(a.viewImages) : void 0,
@@ -18288,7 +18198,7 @@ const app_configurator_$productId = UNSAFE_withComponentProps(function Configura
             if (dq.displayType === "image") {
               const selectedVals = dq.multipleSelection ? (selectedAnswers[q.id] ?? "").split(",").filter(Boolean) : [selectedAnswers[q.id] ?? ""].filter(Boolean);
               const toggleVal = (val) => {
-                var _a3, _b2;
+                var _a2, _b2;
                 if (dq.multipleSelection) {
                   const cur = (selectedAnswers[q.id] ?? "").split(",").filter(Boolean);
                   const isRemoving = cur.includes(val);
@@ -18298,7 +18208,7 @@ const app_configurator_$productId = UNSAFE_withComponentProps(function Configura
                     [q.id]: next.join(",")
                   }));
                   const opt = dq.options.find((o) => o.value === val);
-                  if (!isRemoving && ((_a3 = opt == null ? void 0 : opt.viewImages) == null ? void 0 : _a3.some(Boolean))) {
+                  if (!isRemoving && ((_a2 = opt == null ? void 0 : opt.viewImages) == null ? void 0 : _a2.some(Boolean))) {
                     setLabelAnswerImages((p) => ({
                       ...p,
                       [q.id]: opt.viewImages
@@ -18496,8 +18406,8 @@ const app_configurator_$productId = UNSAFE_withComponentProps(function Configura
                     outline: "none"
                   },
                   onFocus: () => {
-                    var _a3;
-                    if (((_a3 = pa == null ? void 0 : pa.visibleViews) == null ? void 0 : _a3.length) > 0) setCurrentView(Math.min(pa.visibleViews[0] - 1, numViews - 1));
+                    var _a2;
+                    if (((_a2 = pa == null ? void 0 : pa.visibleViews) == null ? void 0 : _a2.length) > 0) setCurrentView(Math.min(pa.visibleViews[0] - 1, numViews - 1));
                   }
                 }), /* @__PURE__ */ jsxs("span", {
                   style: {
@@ -18563,8 +18473,8 @@ const app_configurator_$productId = UNSAFE_withComponentProps(function Configura
                     display: "none"
                   },
                   onChange: (e) => {
-                    var _a3;
-                    const f = (_a3 = e.target.files) == null ? void 0 : _a3[0];
+                    var _a2;
+                    const f = (_a2 = e.target.files) == null ? void 0 : _a2[0];
                     if (f) handleFileUpload(q.id, f);
                   }
                 })]
@@ -18698,13 +18608,13 @@ const app_configurator_$productId = UNSAFE_withComponentProps(function Configura
             if (!areas || areas.length === 0) return true;
             return areas.some((pa) => pa.visibleViews.includes(currentView + 1));
           }).map((q) => {
-            var _a3, _b2;
+            var _a2, _b2;
             const img = uploadedImages[q.id];
             if (!img) return null;
             const fq = q;
             return /* @__PURE__ */ jsx(Image, {
               image: img,
-              x: (((_a3 = fq.position) == null ? void 0 : _a3.x) ?? 100) * COORD_SCALE,
+              x: (((_a2 = fq.position) == null ? void 0 : _a2.x) ?? 100) * COORD_SCALE,
               y: (((_b2 = fq.position) == null ? void 0 : _b2.y) ?? 100) * COORD_SCALE,
               width: (fq.defaultWidth ?? 120) * COORD_SCALE,
               height: (fq.defaultHeight ?? 120) * COORD_SCALE,
@@ -18819,7 +18729,7 @@ async function loader$4({
   request,
   params
 }) {
-  var _a2;
+  var _a;
   const {
     admin
   } = await authenticate.admin(request);
@@ -18852,7 +18762,7 @@ async function loader$4({
     }
   });
   const data = await resp.json();
-  const product = (_a2 = data.data) == null ? void 0 : _a2.product;
+  const product = (_a = data.data) == null ? void 0 : _a.product;
   if (!product) throw new Response("Product not found", {
     status: 404
   });
@@ -18864,7 +18774,7 @@ async function loader$4({
 async function action$7({
   request
 }) {
-  var _a2, _b;
+  var _a, _b;
   const {
     admin,
     session
@@ -18927,7 +18837,7 @@ async function action$7({
     }
   });
   const data = await resp.json();
-  const errs = ((_b = (_a2 = data.data) == null ? void 0 : _a2.inventoryAdjustQuantities) == null ? void 0 : _b.userErrors) ?? [];
+  const errs = ((_b = (_a = data.data) == null ? void 0 : _a.inventoryAdjustQuantities) == null ? void 0 : _b.userErrors) ?? [];
   if (errs.length > 0) return {
     error: errs[0].message
   };
@@ -18937,7 +18847,7 @@ async function action$7({
   };
 }
 const app_inventory_$productId = UNSAFE_withComponentProps(function InventoryPage() {
-  var _a2;
+  var _a;
   const {
     product,
     productId
@@ -18946,7 +18856,7 @@ const app_inventory_$productId = UNSAFE_withComponentProps(function InventoryPag
   const navigation = useNavigation();
   const submit = useSubmit();
   const saving = navigation.state === "submitting";
-  const variants = (((_a2 = product.variants) == null ? void 0 : _a2.edges) ?? []).map((e) => e.node);
+  const variants = (((_a = product.variants) == null ? void 0 : _a.edges) ?? []).map((e) => e.node);
   const inputSt2 = {
     padding: "8px 10px",
     border: "1px solid #d1d5db",
@@ -19062,9 +18972,9 @@ const app_inventory_$productId = UNSAFE_withComponentProps(function InventoryPag
       },
       children: ["✓ ", actionData.message]
     }), variants.map((variant) => {
-      var _a3;
+      var _a2;
       const item = variant.inventoryItem;
-      const levels = (((_a3 = item == null ? void 0 : item.inventoryLevels) == null ? void 0 : _a3.edges) ?? []).map((e) => e.node);
+      const levels = (((_a2 = item == null ? void 0 : item.inventoryLevels) == null ? void 0 : _a2.edges) ?? []).map((e) => e.node);
       return /* @__PURE__ */ jsxs("div", {
         style: {
           marginBottom: 20,
@@ -19149,8 +19059,8 @@ const app_inventory_$productId = UNSAFE_withComponentProps(function InventoryPag
           },
           children: "No locations found. Add a location in your Shopify admin settings."
         }), (item == null ? void 0 : item.tracked) && levels.map((level) => {
-          var _a4, _b, _c, _d, _e, _f, _g;
-          const available = ((_b = (_a4 = level.quantities) == null ? void 0 : _a4.find((q) => q.name === "available")) == null ? void 0 : _b.quantity) ?? 0;
+          var _a3, _b, _c, _d, _e, _f, _g;
+          const available = ((_b = (_a3 = level.quantities) == null ? void 0 : _a3.find((q) => q.name === "available")) == null ? void 0 : _b.quantity) ?? 0;
           const onHand = ((_d = (_c = level.quantities) == null ? void 0 : _c.find((q) => q.name === "on_hand")) == null ? void 0 : _d.quantity) ?? 0;
           const reserved = ((_f = (_e = level.quantities) == null ? void 0 : _e.find((q) => q.name === "reserved")) == null ? void 0 : _f.quantity) ?? 0;
           return /* @__PURE__ */ jsxs("div", {
@@ -19282,7 +19192,7 @@ async function loader$3({
   request,
   params
 }) {
-  var _a2;
+  var _a;
   const {
     admin
   } = await authenticate.admin(request);
@@ -19304,7 +19214,7 @@ async function loader$3({
     }
   })]);
   const productJson = await productResp.json();
-  const product = (_a2 = productJson.data) == null ? void 0 : _a2.product;
+  const product = (_a = productJson.data) == null ? void 0 : _a.product;
   if (!product) throw new Response("Product not found", {
     status: 404
   });
@@ -19324,7 +19234,7 @@ async function action$6({
   request,
   params
 }) {
-  var _a2, _b;
+  var _a, _b;
   const {
     session
   } = await authenticate.admin(request);
@@ -19386,7 +19296,7 @@ async function action$6({
   const data = await resp.json();
   return {
     success: true,
-    createdCount: ((_b = (_a2 = data.product) == null ? void 0 : _a2.variants) == null ? void 0 : _b.length) ?? 0
+    createdCount: ((_b = (_a = data.product) == null ? void 0 : _a.variants) == null ? void 0 : _b.length) ?? 0
   };
 }
 function cartesian(arrays) {
@@ -20091,14 +20001,14 @@ async function action$5({
   };
 }
 function getCurrencySymbol(code) {
-  var _a2;
+  var _a;
   try {
-    return ((_a2 = new Intl.NumberFormat("en", {
+    return ((_a = new Intl.NumberFormat("en", {
       style: "currency",
       currency: code,
       minimumFractionDigits: 0,
       maximumFractionDigits: 0
-    }).formatToParts(0).find((p) => p.type === "currency")) == null ? void 0 : _a2.value) ?? code;
+    }).formatToParts(0).find((p) => p.type === "currency")) == null ? void 0 : _a.value) ?? code;
   } catch {
     return code;
   }
@@ -21343,14 +21253,14 @@ const app_pricing_$productId = UNSAFE_withComponentProps(function PricingPage() 
     return true;
   });
   const getQName = useCallback((qId) => {
-    var _a2, _b;
-    return ((_b = (_a2 = answerable.find((q) => q.id === qId)) == null ? void 0 : _a2.name) == null ? void 0 : _b.toUpperCase()) ?? qId;
+    var _a, _b;
+    return ((_b = (_a = answerable.find((q) => q.id === qId)) == null ? void 0 : _a.name) == null ? void 0 : _b.toUpperCase()) ?? qId;
   }, [answerable]);
   const getAName = useCallback((qId, aId) => {
-    var _a2;
+    var _a;
     const q = answerable.find((q2) => q2.id === qId);
     if (!q) return aId;
-    return ((_a2 = getQuestionAnswers(q).find((a) => a.value === aId)) == null ? void 0 : _a2.label) ?? aId;
+    return ((_a = getQuestionAnswers(q).find((a) => a.value === aId)) == null ? void 0 : _a.label) ?? aId;
   }, [answerable]);
   const isAllSelected = filteredPrices.length > 0 && filteredPrices.every((ep) => selectedIds.has(ep.id));
   useEffect(() => {
@@ -22173,8 +22083,8 @@ const app_pricing_$productId = UNSAFE_withComponentProps(function PricingPage() 
               }) : /* @__PURE__ */ jsx("div", {
                 children: pricing.equations.map((eq) => {
                   const preview = eq.lines.map((l, i) => {
-                    var _a2;
-                    const name = l.type === "number" ? String(l.numberValue ?? 0) : ((_a2 = answerable.find((q) => q.id === l.questionId)) == null ? void 0 : _a2.name) ?? `Q${i + 1}`;
+                    var _a;
+                    const name = l.type === "number" ? String(l.numberValue ?? 0) : ((_a = answerable.find((q) => q.id === l.questionId)) == null ? void 0 : _a.name) ?? `Q${i + 1}`;
                     return i === 0 ? name : ` ${eq.operators[i - 1] ?? "+"} ${name}`;
                   }).join("");
                   return /* @__PURE__ */ jsxs("div", {
@@ -22372,7 +22282,7 @@ function is403(e) {
 async function action$4({
   request
 }) {
-  var _a2, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u, _v;
+  var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u, _v;
   const url = new URL(request.url);
   const shopFromUrl = url.searchParams.get("shop") || "";
   let admin, session;
@@ -22405,7 +22315,7 @@ async function action$4({
     throw e;
   }
   const formData = await request.formData();
-  const title = (_a2 = formData.get("title")) == null ? void 0 : _a2.trim();
+  const title = (_a = formData.get("title")) == null ? void 0 : _a.trim();
   const price = ((_b = formData.get("price")) == null ? void 0 : _b.trim()) || "0.00";
   const description = ((_c = formData.get("description")) == null ? void 0 : _c.trim()) || "";
   const stock = parseInt(((_d = formData.get("stock")) == null ? void 0 : _d.trim()) || "0", 10);
@@ -22730,7 +22640,7 @@ const route19 = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.definePrope
 async function action$3({
   request
 }) {
-  var _a2;
+  var _a;
   await authenticate.admin(request);
   const formData = await request.formData();
   const file = formData.get("file");
@@ -22750,7 +22660,7 @@ async function action$3({
         recursive: true
       });
     }
-    const ext = ((_a2 = file.name.split(".").pop()) == null ? void 0 : _a2.toLowerCase()) || "png";
+    const ext = ((_a = file.name.split(".").pop()) == null ? void 0 : _a.toLowerCase()) || "png";
     const filename = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
     const filePath = join(uploadsDir, filename);
     writeFileSync(filePath, buffer);
@@ -22811,7 +22721,7 @@ const route21 = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.definePrope
 async function action$2({
   request
 }) {
-  var _a2;
+  var _a;
   await authenticate.admin(request);
   const formData = await request.formData();
   const file = formData.get("file");
@@ -22822,7 +22732,7 @@ async function action$2({
       status: 400
     });
   }
-  const ext = (_a2 = file.name.split(".").pop()) == null ? void 0 : _a2.toLowerCase();
+  const ext = (_a = file.name.split(".").pop()) == null ? void 0 : _a.toLowerCase();
   if (ext !== "glb") {
     return Response.json({
       error: "Only .glb files are accepted"
@@ -22912,7 +22822,7 @@ async function loader$1({
 async function action$1({
   request
 }) {
-  var _a2, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l;
+  var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l;
   const {
     admin,
     session
@@ -22982,7 +22892,7 @@ async function action$1({
       }
     });
     const copyData = await copyResp.json();
-    const newProduct = (_b = (_a2 = copyData.data) == null ? void 0 : _a2.productDuplicate) == null ? void 0 : _b.newProduct;
+    const newProduct = (_b = (_a = copyData.data) == null ? void 0 : _a.productDuplicate) == null ? void 0 : _b.newProduct;
     if (!newProduct) return {
       error: ((_f = (_e = (_d = (_c = copyData.data) == null ? void 0 : _c.productDuplicate) == null ? void 0 : _d.userErrors) == null ? void 0 : _e[0]) == null ? void 0 : _f.message) ?? "Duplicate failed"
     };
@@ -23005,7 +22915,7 @@ async function action$1({
       productUpdate(input: { id: $id, status: $status }) {
         product {
           id status
-          variants(first: 20) { edges { node { inventoryItem { id tracked } } } }
+          variants(first: 100) { edges { node { id } } }
         }
         userErrors { field message }
       }
@@ -23021,27 +22931,25 @@ async function action$1({
     error: errs[0].message
   };
   if (newStatus === "ACTIVE") {
-    const variants = ((_l = (_k = (_j = (_i = statusData.data) == null ? void 0 : _i.productUpdate) == null ? void 0 : _j.product) == null ? void 0 : _k.variants) == null ? void 0 : _l.edges) ?? [];
-    const untrackedItems = variants.map((e) => e.node.inventoryItem).filter((item) => item && !item.tracked);
-    await Promise.all(untrackedItems.map((item) => {
-      const numericItemId = item.id.replace("gid://shopify/InventoryItem/", "");
-      return fetch(`https://${session.shop}/admin/api/${apiVersion}/inventory_items/${numericItemId}.json`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Shopify-Access-Token": session.accessToken
-        },
-        body: JSON.stringify({
-          inventory_item: {
-            id: parseInt(numericItemId, 10),
-            tracked: true
+    const variantIds = (((_l = (_k = (_j = (_i = statusData.data) == null ? void 0 : _i.productUpdate) == null ? void 0 : _j.product) == null ? void 0 : _k.variants) == null ? void 0 : _l.edges) ?? []).map((e) => e.node.id);
+    if (variantIds.length > 0) {
+      await admin.graphql(`mutation SetInventoryPolicy($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
+          productVariantsBulkUpdate(productId: $productId, variants: $variants) {
+            userErrors { field message }
           }
-        })
+        }`, {
+        variables: {
+          productId,
+          variants: variantIds.map((id) => ({
+            id,
+            inventoryPolicy: "CONTINUE"
+          }))
+        }
       });
-    }));
+    }
   }
-  const numericId = productId.replace("gid://shopify/Product/", "");
-  await fetch(`https://${session.shop}/admin/api/${apiVersion}/products/${numericId}.json`, {
+  const numericProductId = productId.replace("gid://shopify/Product/", "");
+  const restResp = await fetch(`https://${session.shop}/admin/api/${apiVersion}/products/${numericProductId}.json`, {
     method: "PUT",
     headers: {
       "Content-Type": "application/json",
@@ -23049,11 +22957,17 @@ async function action$1({
     },
     body: JSON.stringify({
       product: {
-        id: numericId,
-        published_at: newStatus === "ACTIVE" ? (/* @__PURE__ */ new Date()).toISOString() : null
+        id: parseInt(numericProductId, 10),
+        published: newStatus === "ACTIVE"
       }
     })
   });
+  if (!restResp.ok) {
+    const errBody = await restResp.json().catch(() => ({}));
+    return {
+      error: String(errBody.errors ?? "Failed to update Online Store visibility")
+    };
+  }
   return {
     success: true,
     productId,
@@ -23078,8 +22992,8 @@ const app_products = UNSAFE_withComponentProps(function ProductsPage() {
   const handleBulkDelete = useCallback(() => {
     if (selectedResources.length === 0) return;
     const names = products.filter((p) => selectedResources.includes(p.productId)).map((p) => {
-      var _a2;
-      return ((_a2 = p.shopify) == null ? void 0 : _a2.title) ?? p.productName;
+      var _a;
+      return ((_a = p.shopify) == null ? void 0 : _a.title) ?? p.productName;
     }).join(", ");
     if (confirm(`Delete ${selectedResources.length} product${selectedResources.length !== 1 ? "s" : ""}?
 
@@ -23165,7 +23079,7 @@ function ProductRow({
   index: index2,
   selected
 }) {
-  var _a2, _b, _c;
+  var _a, _b, _c, _d;
   const {
     shopify: shopify2,
     layers,
@@ -23175,13 +23089,14 @@ function ProductRow({
   const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
   const toggleMenu = useCallback(() => setMenuOpen((v) => !v), []);
-  const price = (_a2 = shopify2 == null ? void 0 : shopify2.priceRangeV2) == null ? void 0 : _a2.minVariantPrice;
+  const price = (_a = shopify2 == null ? void 0 : shopify2.priceRangeV2) == null ? void 0 : _a.minVariantPrice;
   const viewNames = (options == null ? void 0 : options.viewNames) ?? [];
   const viewCount = viewNames.length || 1;
   const isActive = (shopify2 == null ? void 0 : shopify2.status) === "ACTIVE";
   const firstLayerSrc = Array.isArray(layers) && layers.length > 0 ? (_b = layers[0]) == null ? void 0 : _b.src : null;
   const thumbSrc = ((_c = shopify2 == null ? void 0 : shopify2.featuredImage) == null ? void 0 : _c.url) || firstLayerSrc;
   const saving = fetcher.state !== "idle";
+  const rowError = (_d = fetcher.data) == null ? void 0 : _d.error;
   const menuActivator = /* @__PURE__ */ jsx(Button, {
     variant: "plain",
     icon: MenuHorizontalIcon,
@@ -23250,6 +23165,11 @@ function ProductRow({
               tone: isActive ? "critical" : void 0,
               children: isActive ? "Unpublish" : "Publish"
             })]
+          }), rowError && /* @__PURE__ */ jsx(Text$1, {
+            variant: "bodySm",
+            tone: "critical",
+            as: "p",
+            children: rowError
           })]
         })
       })
@@ -24286,8 +24206,8 @@ const route25 = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.definePrope
   __proto__: null,
   default: app__index
 }, Symbol.toStringTag, { value: "Module" }));
-const serverManifest = { "entry": { "module": "/assets/entry.client-CBG9gWr7.js", "imports": ["/assets/chunk-4N6VE7H7-MeczOpdo.js", "/assets/index-rpFy-Kpx.js", "/assets/index-CoSDG3-6.js"], "css": [] }, "routes": { "root": { "id": "root", "parentId": void 0, "path": "", "index": void 0, "caseSensitive": void 0, "hasAction": false, "hasLoader": false, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasDefaultExport": true, "hasErrorBoundary": false, "module": "/assets/root-CUH1LoiO.js", "imports": ["/assets/chunk-4N6VE7H7-MeczOpdo.js", "/assets/index-rpFy-Kpx.js", "/assets/index-CoSDG3-6.js"], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/webhooks.customers.data_request": { "id": "routes/webhooks.customers.data_request", "parentId": "root", "path": "webhooks/customers/data_request", "index": void 0, "caseSensitive": void 0, "hasAction": true, "hasLoader": false, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasDefaultExport": false, "hasErrorBoundary": false, "module": "/assets/webhooks.customers.data_request-l0sNRNKZ.js", "imports": [], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/apps.product-configurator.data": { "id": "routes/apps.product-configurator.data", "parentId": "root", "path": "apps/product-configurator/data", "index": void 0, "caseSensitive": void 0, "hasAction": false, "hasLoader": true, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasDefaultExport": false, "hasErrorBoundary": false, "module": "/assets/apps.product-configurator.data-l0sNRNKZ.js", "imports": [], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/webhooks.app.scopes_update": { "id": "routes/webhooks.app.scopes_update", "parentId": "root", "path": "webhooks/app/scopes_update", "index": void 0, "caseSensitive": void 0, "hasAction": true, "hasLoader": false, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasDefaultExport": false, "hasErrorBoundary": false, "module": "/assets/webhooks.app.scopes_update-l0sNRNKZ.js", "imports": [], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/webhooks.customers.redact": { "id": "routes/webhooks.customers.redact", "parentId": "root", "path": "webhooks/customers/redact", "index": void 0, "caseSensitive": void 0, "hasAction": true, "hasLoader": false, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasDefaultExport": false, "hasErrorBoundary": false, "module": "/assets/webhooks.customers.redact-l0sNRNKZ.js", "imports": [], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/webhooks.app.uninstalled": { "id": "routes/webhooks.app.uninstalled", "parentId": "root", "path": "webhooks/app/uninstalled", "index": void 0, "caseSensitive": void 0, "hasAction": true, "hasLoader": false, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasDefaultExport": false, "hasErrorBoundary": false, "module": "/assets/webhooks.app.uninstalled-l0sNRNKZ.js", "imports": [], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/configurator.$productId": { "id": "routes/configurator.$productId", "parentId": "root", "path": "configurator/:productId", "index": void 0, "caseSensitive": void 0, "hasAction": false, "hasLoader": true, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasDefaultExport": true, "hasErrorBoundary": false, "module": "/assets/configurator._productId-D9wxAth6.js", "imports": ["/assets/chunk-4N6VE7H7-MeczOpdo.js", "/assets/ThreeViewer-BPibY7Q-.js", "/assets/configurator-Bs0Bmczv.js", "/assets/index-CoSDG3-6.js"], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/webhooks.shop.redact": { "id": "routes/webhooks.shop.redact", "parentId": "root", "path": "webhooks/shop/redact", "index": void 0, "caseSensitive": void 0, "hasAction": true, "hasLoader": false, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasDefaultExport": false, "hasErrorBoundary": false, "module": "/assets/webhooks.shop.redact-l0sNRNKZ.js", "imports": [], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/upload-preview": { "id": "routes/upload-preview", "parentId": "root", "path": "upload-preview", "index": void 0, "caseSensitive": void 0, "hasAction": true, "hasLoader": false, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasDefaultExport": false, "hasErrorBoundary": false, "module": "/assets/upload-preview-l0sNRNKZ.js", "imports": [], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/auth.login": { "id": "routes/auth.login", "parentId": "root", "path": "auth/login", "index": void 0, "caseSensitive": void 0, "hasAction": true, "hasLoader": true, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasDefaultExport": true, "hasErrorBoundary": false, "module": "/assets/route-DtiItvyd.js", "imports": ["/assets/chunk-4N6VE7H7-MeczOpdo.js", "/assets/AppProxyProvider-BoWZ72lL.js"], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/auth.$": { "id": "routes/auth.$", "parentId": "root", "path": "auth/*", "index": void 0, "caseSensitive": void 0, "hasAction": false, "hasLoader": true, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasDefaultExport": false, "hasErrorBoundary": false, "module": "/assets/auth._-l0sNRNKZ.js", "imports": [], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/_index": { "id": "routes/_index", "parentId": "root", "path": void 0, "index": true, "caseSensitive": void 0, "hasAction": false, "hasLoader": true, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasDefaultExport": true, "hasErrorBoundary": false, "module": "/assets/route-4T5YxZcL.js", "imports": ["/assets/chunk-4N6VE7H7-MeczOpdo.js"], "css": ["/assets/route-CNPfFM0M.css"], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/app": { "id": "routes/app", "parentId": "root", "path": "app", "index": void 0, "caseSensitive": void 0, "hasAction": false, "hasLoader": true, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasDefaultExport": true, "hasErrorBoundary": true, "module": "/assets/app-_Jf78N2h.js", "imports": ["/assets/chunk-4N6VE7H7-MeczOpdo.js", "/assets/AppProxyProvider-BoWZ72lL.js", "/assets/context-CC90ckuS.js"], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/app.configurator-setup.$productId": { "id": "routes/app.configurator-setup.$productId", "parentId": "routes/app", "path": "configurator-setup/:productId", "index": void 0, "caseSensitive": void 0, "hasAction": true, "hasLoader": true, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasDefaultExport": true, "hasErrorBoundary": false, "module": "/assets/app.configurator-setup._productId-jBuE8v0L.js", "imports": ["/assets/chunk-4N6VE7H7-MeczOpdo.js", "/assets/ThreeViewer-BPibY7Q-.js", "/assets/configurator-Bs0Bmczv.js", "/assets/index-CoSDG3-6.js"], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/app.configurator-style.$productId": { "id": "routes/app.configurator-style.$productId", "parentId": "routes/app", "path": "configurator-style/:productId", "index": void 0, "caseSensitive": void 0, "hasAction": true, "hasLoader": true, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasDefaultExport": true, "hasErrorBoundary": false, "module": "/assets/app.configurator-style._productId-BNttGptw.js", "imports": ["/assets/chunk-4N6VE7H7-MeczOpdo.js", "/assets/Page-BH3Os2fx.js", "/assets/Banner-B9GlMWRw.js", "/assets/Divider-CWt5q4K2.js", "/assets/context-CC90ckuS.js", "/assets/index-rpFy-Kpx.js", "/assets/index-CoSDG3-6.js"], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/app.configurator.$productId": { "id": "routes/app.configurator.$productId", "parentId": "routes/app", "path": "configurator/:productId", "index": void 0, "caseSensitive": void 0, "hasAction": false, "hasLoader": true, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasDefaultExport": true, "hasErrorBoundary": false, "module": "/assets/app.configurator._productId-DXWOnLVF.js", "imports": ["/assets/chunk-4N6VE7H7-MeczOpdo.js", "/assets/ThreeViewer-BPibY7Q-.js", "/assets/configurator-Bs0Bmczv.js", "/assets/index-CoSDG3-6.js"], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/app.inventory.$productId": { "id": "routes/app.inventory.$productId", "parentId": "routes/app", "path": "inventory/:productId", "index": void 0, "caseSensitive": void 0, "hasAction": true, "hasLoader": true, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasDefaultExport": true, "hasErrorBoundary": false, "module": "/assets/app.inventory._productId-khdIU5eE.js", "imports": ["/assets/chunk-4N6VE7H7-MeczOpdo.js"], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/app.variants.$productId": { "id": "routes/app.variants.$productId", "parentId": "routes/app", "path": "variants/:productId", "index": void 0, "caseSensitive": void 0, "hasAction": true, "hasLoader": true, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasDefaultExport": true, "hasErrorBoundary": false, "module": "/assets/app.variants._productId-qLv90q0P.js", "imports": ["/assets/chunk-4N6VE7H7-MeczOpdo.js", "/assets/configurator-Bs0Bmczv.js"], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/app.pricing.$productId": { "id": "routes/app.pricing.$productId", "parentId": "routes/app", "path": "pricing/:productId", "index": void 0, "caseSensitive": void 0, "hasAction": true, "hasLoader": true, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasDefaultExport": true, "hasErrorBoundary": false, "module": "/assets/app.pricing._productId-ZEyfMviD.js", "imports": ["/assets/chunk-4N6VE7H7-MeczOpdo.js", "/assets/configurator-Bs0Bmczv.js"], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/app.product-picker": { "id": "routes/app.product-picker", "parentId": "routes/app", "path": "product-picker", "index": void 0, "caseSensitive": void 0, "hasAction": true, "hasLoader": false, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasDefaultExport": true, "hasErrorBoundary": false, "module": "/assets/app.product-picker-KbEzVuvJ.js", "imports": ["/assets/chunk-4N6VE7H7-MeczOpdo.js", "/assets/Page-BH3Os2fx.js", "/assets/Banner-B9GlMWRw.js", "/assets/Divider-CWt5q4K2.js", "/assets/context-CC90ckuS.js", "/assets/index-rpFy-Kpx.js", "/assets/index-CoSDG3-6.js"], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/app.upload-image": { "id": "routes/app.upload-image", "parentId": "routes/app", "path": "upload-image", "index": void 0, "caseSensitive": void 0, "hasAction": true, "hasLoader": false, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasDefaultExport": false, "hasErrorBoundary": false, "module": "/assets/app.upload-image-l0sNRNKZ.js", "imports": [], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/app.additional": { "id": "routes/app.additional", "parentId": "routes/app", "path": "additional", "index": void 0, "caseSensitive": void 0, "hasAction": false, "hasLoader": false, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasDefaultExport": true, "hasErrorBoundary": false, "module": "/assets/app.additional-CB4TE1pb.js", "imports": ["/assets/chunk-4N6VE7H7-MeczOpdo.js"], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/app.upload-glb": { "id": "routes/app.upload-glb", "parentId": "routes/app", "path": "upload-glb", "index": void 0, "caseSensitive": void 0, "hasAction": true, "hasLoader": false, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasDefaultExport": false, "hasErrorBoundary": false, "module": "/assets/app.upload-glb-l0sNRNKZ.js", "imports": [], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/app.products": { "id": "routes/app.products", "parentId": "routes/app", "path": "products", "index": void 0, "caseSensitive": void 0, "hasAction": true, "hasLoader": true, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasDefaultExport": true, "hasErrorBoundary": false, "module": "/assets/app.products-DBBBySiq.js", "imports": ["/assets/chunk-4N6VE7H7-MeczOpdo.js", "/assets/Page-BH3Os2fx.js", "/assets/context-CC90ckuS.js", "/assets/ProductIcon.svg-DT7AoPQ4.js", "/assets/index-rpFy-Kpx.js", "/assets/index-CoSDG3-6.js"], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/app.settings": { "id": "routes/app.settings", "parentId": "routes/app", "path": "settings", "index": void 0, "caseSensitive": void 0, "hasAction": true, "hasLoader": true, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasDefaultExport": true, "hasErrorBoundary": false, "module": "/assets/app.settings-n39XoXHG.js", "imports": ["/assets/chunk-4N6VE7H7-MeczOpdo.js", "/assets/Page-BH3Os2fx.js", "/assets/Banner-B9GlMWRw.js", "/assets/Divider-CWt5q4K2.js", "/assets/context-CC90ckuS.js", "/assets/index-rpFy-Kpx.js", "/assets/index-CoSDG3-6.js"], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/app._index": { "id": "routes/app._index", "parentId": "routes/app", "path": void 0, "index": true, "caseSensitive": void 0, "hasAction": false, "hasLoader": false, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasDefaultExport": true, "hasErrorBoundary": false, "module": "/assets/app._index-DIdDpSfw.js", "imports": ["/assets/chunk-4N6VE7H7-MeczOpdo.js", "/assets/Page-BH3Os2fx.js", "/assets/ProductIcon.svg-DT7AoPQ4.js", "/assets/Divider-CWt5q4K2.js", "/assets/context-CC90ckuS.js", "/assets/index-rpFy-Kpx.js", "/assets/index-CoSDG3-6.js"], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 } }, "url": "/assets/manifest-0c31f6c5.js", "version": "0c31f6c5", "sri": void 0 };
-const assetsBuildDirectory = "build\\client";
+const serverManifest = { "entry": { "module": "/assets/entry.client-CBG9gWr7.js", "imports": ["/assets/chunk-4N6VE7H7-MeczOpdo.js", "/assets/index-rpFy-Kpx.js", "/assets/index-CoSDG3-6.js"], "css": [] }, "routes": { "root": { "id": "root", "parentId": void 0, "path": "", "index": void 0, "caseSensitive": void 0, "hasAction": false, "hasLoader": false, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasDefaultExport": true, "hasErrorBoundary": false, "module": "/assets/root-B-uol03-.js", "imports": ["/assets/chunk-4N6VE7H7-MeczOpdo.js", "/assets/index-rpFy-Kpx.js", "/assets/index-CoSDG3-6.js"], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/webhooks.customers.data_request": { "id": "routes/webhooks.customers.data_request", "parentId": "root", "path": "webhooks/customers/data_request", "index": void 0, "caseSensitive": void 0, "hasAction": true, "hasLoader": false, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasDefaultExport": false, "hasErrorBoundary": false, "module": "/assets/webhooks.customers.data_request-l0sNRNKZ.js", "imports": [], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/apps.product-configurator.data": { "id": "routes/apps.product-configurator.data", "parentId": "root", "path": "apps/product-configurator/data", "index": void 0, "caseSensitive": void 0, "hasAction": false, "hasLoader": true, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasDefaultExport": false, "hasErrorBoundary": false, "module": "/assets/apps.product-configurator.data-l0sNRNKZ.js", "imports": [], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/webhooks.app.scopes_update": { "id": "routes/webhooks.app.scopes_update", "parentId": "root", "path": "webhooks/app/scopes_update", "index": void 0, "caseSensitive": void 0, "hasAction": true, "hasLoader": false, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasDefaultExport": false, "hasErrorBoundary": false, "module": "/assets/webhooks.app.scopes_update-l0sNRNKZ.js", "imports": [], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/webhooks.customers.redact": { "id": "routes/webhooks.customers.redact", "parentId": "root", "path": "webhooks/customers/redact", "index": void 0, "caseSensitive": void 0, "hasAction": true, "hasLoader": false, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasDefaultExport": false, "hasErrorBoundary": false, "module": "/assets/webhooks.customers.redact-l0sNRNKZ.js", "imports": [], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/webhooks.app.uninstalled": { "id": "routes/webhooks.app.uninstalled", "parentId": "root", "path": "webhooks/app/uninstalled", "index": void 0, "caseSensitive": void 0, "hasAction": true, "hasLoader": false, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasDefaultExport": false, "hasErrorBoundary": false, "module": "/assets/webhooks.app.uninstalled-l0sNRNKZ.js", "imports": [], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/configurator.$productId": { "id": "routes/configurator.$productId", "parentId": "root", "path": "configurator/:productId", "index": void 0, "caseSensitive": void 0, "hasAction": false, "hasLoader": true, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasDefaultExport": true, "hasErrorBoundary": false, "module": "/assets/configurator._productId-D9wxAth6.js", "imports": ["/assets/chunk-4N6VE7H7-MeczOpdo.js", "/assets/ThreeViewer-BPibY7Q-.js", "/assets/configurator-Bs0Bmczv.js", "/assets/index-CoSDG3-6.js"], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/webhooks.shop.redact": { "id": "routes/webhooks.shop.redact", "parentId": "root", "path": "webhooks/shop/redact", "index": void 0, "caseSensitive": void 0, "hasAction": true, "hasLoader": false, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasDefaultExport": false, "hasErrorBoundary": false, "module": "/assets/webhooks.shop.redact-l0sNRNKZ.js", "imports": [], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/upload-preview": { "id": "routes/upload-preview", "parentId": "root", "path": "upload-preview", "index": void 0, "caseSensitive": void 0, "hasAction": true, "hasLoader": false, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasDefaultExport": false, "hasErrorBoundary": false, "module": "/assets/upload-preview-l0sNRNKZ.js", "imports": [], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/auth.login": { "id": "routes/auth.login", "parentId": "root", "path": "auth/login", "index": void 0, "caseSensitive": void 0, "hasAction": true, "hasLoader": true, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasDefaultExport": true, "hasErrorBoundary": false, "module": "/assets/route-DtiItvyd.js", "imports": ["/assets/chunk-4N6VE7H7-MeczOpdo.js", "/assets/AppProxyProvider-BoWZ72lL.js"], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/_index": { "id": "routes/_index", "parentId": "root", "path": void 0, "index": true, "caseSensitive": void 0, "hasAction": false, "hasLoader": true, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasDefaultExport": true, "hasErrorBoundary": false, "module": "/assets/route-22iwizJ1.js", "imports": ["/assets/chunk-4N6VE7H7-MeczOpdo.js"], "css": ["/assets/route-Xpdx9QZl.css"], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/auth.$": { "id": "routes/auth.$", "parentId": "root", "path": "auth/*", "index": void 0, "caseSensitive": void 0, "hasAction": false, "hasLoader": true, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasDefaultExport": false, "hasErrorBoundary": false, "module": "/assets/auth._-l0sNRNKZ.js", "imports": [], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/app": { "id": "routes/app", "parentId": "root", "path": "app", "index": void 0, "caseSensitive": void 0, "hasAction": false, "hasLoader": true, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasDefaultExport": true, "hasErrorBoundary": true, "module": "/assets/app-_Jf78N2h.js", "imports": ["/assets/chunk-4N6VE7H7-MeczOpdo.js", "/assets/AppProxyProvider-BoWZ72lL.js", "/assets/context-CC90ckuS.js"], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/app.configurator-setup.$productId": { "id": "routes/app.configurator-setup.$productId", "parentId": "routes/app", "path": "configurator-setup/:productId", "index": void 0, "caseSensitive": void 0, "hasAction": true, "hasLoader": true, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasDefaultExport": true, "hasErrorBoundary": false, "module": "/assets/app.configurator-setup._productId-DGywAqPn.js", "imports": ["/assets/chunk-4N6VE7H7-MeczOpdo.js", "/assets/ThreeViewer-BPibY7Q-.js", "/assets/configurator-Bs0Bmczv.js", "/assets/index-CoSDG3-6.js"], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/app.configurator-style.$productId": { "id": "routes/app.configurator-style.$productId", "parentId": "routes/app", "path": "configurator-style/:productId", "index": void 0, "caseSensitive": void 0, "hasAction": true, "hasLoader": true, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasDefaultExport": true, "hasErrorBoundary": false, "module": "/assets/app.configurator-style._productId-BNttGptw.js", "imports": ["/assets/chunk-4N6VE7H7-MeczOpdo.js", "/assets/Page-BH3Os2fx.js", "/assets/Banner-B9GlMWRw.js", "/assets/Divider-CWt5q4K2.js", "/assets/context-CC90ckuS.js", "/assets/index-rpFy-Kpx.js", "/assets/index-CoSDG3-6.js"], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/app.configurator.$productId": { "id": "routes/app.configurator.$productId", "parentId": "routes/app", "path": "configurator/:productId", "index": void 0, "caseSensitive": void 0, "hasAction": false, "hasLoader": true, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasDefaultExport": true, "hasErrorBoundary": false, "module": "/assets/app.configurator._productId-DXWOnLVF.js", "imports": ["/assets/chunk-4N6VE7H7-MeczOpdo.js", "/assets/ThreeViewer-BPibY7Q-.js", "/assets/configurator-Bs0Bmczv.js", "/assets/index-CoSDG3-6.js"], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/app.inventory.$productId": { "id": "routes/app.inventory.$productId", "parentId": "routes/app", "path": "inventory/:productId", "index": void 0, "caseSensitive": void 0, "hasAction": true, "hasLoader": true, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasDefaultExport": true, "hasErrorBoundary": false, "module": "/assets/app.inventory._productId-khdIU5eE.js", "imports": ["/assets/chunk-4N6VE7H7-MeczOpdo.js"], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/app.variants.$productId": { "id": "routes/app.variants.$productId", "parentId": "routes/app", "path": "variants/:productId", "index": void 0, "caseSensitive": void 0, "hasAction": true, "hasLoader": true, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasDefaultExport": true, "hasErrorBoundary": false, "module": "/assets/app.variants._productId-qLv90q0P.js", "imports": ["/assets/chunk-4N6VE7H7-MeczOpdo.js", "/assets/configurator-Bs0Bmczv.js"], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/app.pricing.$productId": { "id": "routes/app.pricing.$productId", "parentId": "routes/app", "path": "pricing/:productId", "index": void 0, "caseSensitive": void 0, "hasAction": true, "hasLoader": true, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasDefaultExport": true, "hasErrorBoundary": false, "module": "/assets/app.pricing._productId-ZEyfMviD.js", "imports": ["/assets/chunk-4N6VE7H7-MeczOpdo.js", "/assets/configurator-Bs0Bmczv.js"], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/app.product-picker": { "id": "routes/app.product-picker", "parentId": "routes/app", "path": "product-picker", "index": void 0, "caseSensitive": void 0, "hasAction": true, "hasLoader": false, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasDefaultExport": true, "hasErrorBoundary": false, "module": "/assets/app.product-picker-KbEzVuvJ.js", "imports": ["/assets/chunk-4N6VE7H7-MeczOpdo.js", "/assets/Page-BH3Os2fx.js", "/assets/Banner-B9GlMWRw.js", "/assets/Divider-CWt5q4K2.js", "/assets/context-CC90ckuS.js", "/assets/index-rpFy-Kpx.js", "/assets/index-CoSDG3-6.js"], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/app.upload-image": { "id": "routes/app.upload-image", "parentId": "routes/app", "path": "upload-image", "index": void 0, "caseSensitive": void 0, "hasAction": true, "hasLoader": false, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasDefaultExport": false, "hasErrorBoundary": false, "module": "/assets/app.upload-image-l0sNRNKZ.js", "imports": [], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/app.additional": { "id": "routes/app.additional", "parentId": "routes/app", "path": "additional", "index": void 0, "caseSensitive": void 0, "hasAction": false, "hasLoader": false, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasDefaultExport": true, "hasErrorBoundary": false, "module": "/assets/app.additional-CB4TE1pb.js", "imports": ["/assets/chunk-4N6VE7H7-MeczOpdo.js"], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/app.upload-glb": { "id": "routes/app.upload-glb", "parentId": "routes/app", "path": "upload-glb", "index": void 0, "caseSensitive": void 0, "hasAction": true, "hasLoader": false, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasDefaultExport": false, "hasErrorBoundary": false, "module": "/assets/app.upload-glb-l0sNRNKZ.js", "imports": [], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/app.products": { "id": "routes/app.products", "parentId": "routes/app", "path": "products", "index": void 0, "caseSensitive": void 0, "hasAction": true, "hasLoader": true, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasDefaultExport": true, "hasErrorBoundary": false, "module": "/assets/app.products-C9l_ReZx.js", "imports": ["/assets/chunk-4N6VE7H7-MeczOpdo.js", "/assets/Page-BH3Os2fx.js", "/assets/context-CC90ckuS.js", "/assets/ProductIcon.svg-DT7AoPQ4.js", "/assets/index-rpFy-Kpx.js", "/assets/index-CoSDG3-6.js"], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/app.settings": { "id": "routes/app.settings", "parentId": "routes/app", "path": "settings", "index": void 0, "caseSensitive": void 0, "hasAction": true, "hasLoader": true, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasDefaultExport": true, "hasErrorBoundary": false, "module": "/assets/app.settings-n39XoXHG.js", "imports": ["/assets/chunk-4N6VE7H7-MeczOpdo.js", "/assets/Page-BH3Os2fx.js", "/assets/Banner-B9GlMWRw.js", "/assets/Divider-CWt5q4K2.js", "/assets/context-CC90ckuS.js", "/assets/index-rpFy-Kpx.js", "/assets/index-CoSDG3-6.js"], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/app._index": { "id": "routes/app._index", "parentId": "routes/app", "path": void 0, "index": true, "caseSensitive": void 0, "hasAction": false, "hasLoader": false, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasDefaultExport": true, "hasErrorBoundary": false, "module": "/assets/app._index-DIdDpSfw.js", "imports": ["/assets/chunk-4N6VE7H7-MeczOpdo.js", "/assets/Page-BH3Os2fx.js", "/assets/ProductIcon.svg-DT7AoPQ4.js", "/assets/Divider-CWt5q4K2.js", "/assets/context-CC90ckuS.js", "/assets/index-rpFy-Kpx.js", "/assets/index-CoSDG3-6.js"], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 } }, "url": "/assets/manifest-2d9c3bc0.js", "version": "2d9c3bc0", "sri": void 0 };
+const assetsBuildDirectory = "build/client";
 const basename = "/";
 const future = { "unstable_optimizeDeps": false, "v8_passThroughRequests": false, "unstable_trailingSlashAwareDataRequests": false, "unstable_previewServerPrerendering": false, "v8_middleware": false, "v8_splitRouteModules": false, "v8_viteEnvironmentApi": false };
 const ssr = true;
@@ -24377,19 +24297,19 @@ const routes = {
     caseSensitive: void 0,
     module: route9
   },
-  "routes/auth.$": {
-    id: "routes/auth.$",
-    parentId: "root",
-    path: "auth/*",
-    index: void 0,
-    caseSensitive: void 0,
-    module: route10
-  },
   "routes/_index": {
     id: "routes/_index",
     parentId: "root",
     path: void 0,
     index: true,
+    caseSensitive: void 0,
+    module: route10
+  },
+  "routes/auth.$": {
+    id: "routes/auth.$",
+    parentId: "root",
+    path: "auth/*",
+    index: void 0,
     caseSensitive: void 0,
     module: route11
   },
