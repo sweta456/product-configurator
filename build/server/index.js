@@ -47,7 +47,9 @@ shopify.registerWebhooks;
 shopify.sessionStorage;
 const streamTimeout = 5e3;
 async function handleRequest(request, responseStatusCode, responseHeaders, reactRouterContext) {
-  addDocumentResponseHeaders(request, responseHeaders);
+  if (!new URL(request.url).pathname.startsWith("/configurator/")) {
+    addDocumentResponseHeaders(request, responseHeaders);
+  }
   const userAgent = request.headers.get("user-agent");
   const callbackName = isbot(userAgent ?? "") ? "onAllReady" : "onShellReady";
   return new Promise((resolve, reject) => {

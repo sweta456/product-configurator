@@ -1477,7 +1477,7 @@ export default function PricingPage() {
       <div
         style={{
           borderTop: "1px solid #e5e7eb", background: "#fff",
-          padding: "12px 24px", display: "flex", justifyContent: "flex-end", gap: 10, flexShrink: 0,
+          padding: "12px 24px", display: "flex", justifyContent: "center", gap: 10, flexShrink: 0,
         }}
       >
         <button
