@@ -1,3 +1,4 @@
+import { apiVersion } from "../shopify.server";
 import { useLoaderData, Link, useFetcher, useNavigate } from "react-router";
 import { useState, useCallback } from "react";
 import {
@@ -158,7 +159,7 @@ export async function action({ request }: any) {
       productUpdate(input: { id: $id, status: $status }) {
         product {
           id status
-          variants(first: 20) { edges { node { inventoryItem { id tracked } } } }
+          variants(first: 100) { edges { node { id } } }
         }
         userErrors { field message }
       }
@@ -169,37 +170,35 @@ export async function action({ request }: any) {
   const errs = statusData.data?.productUpdate?.userErrors ?? [];
   if (errs.length > 0) return { error: errs[0].message };
 
-  // Auto-enable inventory tracking when publishing via REST
-  // (GraphQL inventoryItemUpdate fails silently on untracked items in this API version)
+  // When publishing, force inventoryPolicy: CONTINUE on all variants so the
+  // product always shows "Add to cart" regardless of stock/location settings.
   if (newStatus === "ACTIVE") {
-    const variants = statusData.data?.productUpdate?.product?.variants?.edges ?? [];
-    const untrackedItems = variants
-      .map((e: any) => e.node.inventoryItem)
-      .filter((item: any) => item && !item.tracked);
+    const variantIds: string[] = (
+      statusData.data?.productUpdate?.product?.variants?.edges ?? []
+    ).map((e: any) => e.node.id);
 
-    await Promise.all(
-      untrackedItems.map((item: any) => {
-        const numericItemId = (item.id as string).replace("gid://shopify/InventoryItem/", "");
-        return fetch(
-          `https://${session.shop}/admin/api/2024-01/inventory_items/${numericItemId}.json`,
-          {
-            method: "PUT",
-            headers: {
-              "Content-Type": "application/json",
-              "X-Shopify-Access-Token": session.accessToken as string,
-            },
-            body: JSON.stringify({
-              inventory_item: { id: parseInt(numericItemId, 10), tracked: true },
-            }),
+    if (variantIds.length > 0) {
+      await admin.graphql(
+        `mutation SetInventoryPolicy($productId: ID!, $variants: [ProductVariantsBulkInput!]!) {
+          productVariantsBulkUpdate(productId: $productId, variants: $variants) {
+            userErrors { field message }
+          }
+        }`,
+        {
+          variables: {
+            productId,
+            variants: variantIds.map((id) => ({ id, inventoryPolicy: "CONTINUE" })),
           },
-        );
-      }),
-    );
+        },
+      );
+    }
   }
 
-  const numericId = productId.replace("gid://shopify/Product/", "");
-  await fetch(
-    `https://${session.shop}/admin/api/2024-01/products/${numericId}.json`,
+  // Use REST to set published: true/false on the Online Store channel.
+  // This is simpler and requires no publication scope — just write_products.
+  const numericProductId = productId.replace("gid://shopify/Product/", "");
+  const restResp = await fetch(
+    `https://${session.shop}/admin/api/${apiVersion}/products/${numericProductId}.json`,
     {
       method: "PUT",
       headers: {
@@ -207,13 +206,15 @@ export async function action({ request }: any) {
         "X-Shopify-Access-Token": session.accessToken as string,
       },
       body: JSON.stringify({
-        product: {
-          id: numericId,
-          published_at: newStatus === "ACTIVE" ? new Date().toISOString() : null,
-        },
+        product: { id: parseInt(numericProductId, 10), published: newStatus === "ACTIVE" },
       }),
-    }
+    },
   );
+
+  if (!restResp.ok) {
+    const errBody = await restResp.json().catch(() => ({}));
+    return { error: String(errBody.errors ?? "Failed to update Online Store visibility") };
+  }
 
   return { success: true, productId, status: newStatus };
 }
@@ -323,6 +324,7 @@ function ProductRow({ item, index, selected }: { item: any; index: number; selec
   const firstLayerSrc = Array.isArray(layers) && layers.length > 0 ? (layers as LayerConfig[])[0]?.src : null;
   const thumbSrc = shopify?.featuredImage?.url || firstLayerSrc;
   const saving = fetcher.state !== "idle";
+  const rowError = fetcher.data?.error as string | undefined;
 
   const menuActivator = (
     <Button
@@ -374,6 +376,9 @@ function ProductRow({ item, index, selected }: { item: any; index: number; selec
                 </Button>
               )}
             </InlineStack>
+            {rowError && (
+              <Text variant="bodySm" tone="critical" as="p">{rowError}</Text>
+            )}
           </fetcher.Form>
         </div>
       </IndexTable.Cell>

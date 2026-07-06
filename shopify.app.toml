@@ -8,7 +8,7 @@ name = "Konfig ‑ Product Customizer"
 icon = "public/icon.png"
 
 [access_scopes]
-scopes = "write_products,read_products,write_orders,read_orders,read_inventory,write_inventory,read_locations"
+scopes = "write_products,read_products,write_orders,read_orders,read_inventory,write_inventory,read_locations,write_publications,read_publications"
 optional_scopes = [ ]
 use_legacy_install_flow = false
 
@@ -31,3 +31,9 @@ redirect_urls = [
 
 [build]
 automatically_update_urls_on_dev = true
+
+[shop.metafields.app.configurator_app_url]
+type = "single_line_text_field"
+name = "Configurator App URL"
+description = "Public URL of the Product Configurator backend. Set automatically after install/auth; read by the theme app block since Liquid has no built-in way to know an app's URL."
+access.admin = "merchant_read"
