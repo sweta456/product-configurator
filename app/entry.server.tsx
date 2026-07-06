@@ -14,7 +14,13 @@ export default async function handleRequest(
   responseHeaders: Headers,
   reactRouterContext: EntryContext
 ) {
-  addDocumentResponseHeaders(request, responseHeaders);
+  // Skip Shopify's admin-embedded CSP on the storefront-facing configurator
+  // route -- it overwrites that route's own "frame-ancestors *" header
+  // (needed so the theme's storefront iframe can load it) with an
+  // admin-only policy that refuses non-embedded-admin requests.
+  if (!new URL(request.url).pathname.startsWith("/configurator/")) {
+    addDocumentResponseHeaders(request, responseHeaders);
+  }
   const userAgent = request.headers.get("user-agent");
   const callbackName = isbot(userAgent ?? '')
     ? "onAllReady"
