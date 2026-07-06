@@ -34,38 +34,7 @@ const shopify = shopifyApp({
   sessionStorage: new PrismaSessionStorage(prisma),
   distribution: AppDistribution.AppStore,
   future: {},
-  ...process.env.SHOP_CUSTOM_DOMAIN ? { customShopDomains: [process.env.SHOP_CUSTOM_DOMAIN] } : {},
-  hooks: {
-    afterAuth: async ({ admin }) => {
-      try {
-        const shopResponse = await admin.graphql(`#graphql
-          query { shop { id } }
-        `);
-        const { data } = await shopResponse.json();
-        await admin.graphql(
-          `#graphql
-          mutation SetConfiguratorAppUrl($ownerId: ID!, $value: String!) {
-            metafieldsSet(metafields: [{
-              ownerId: $ownerId
-              key: "configurator_app_url"
-              type: "single_line_text_field"
-              value: $value
-            }]) {
-              userErrors { field message }
-            }
-          }`,
-          {
-            variables: {
-              ownerId: data.shop.id,
-              value: process.env.SHOPIFY_APP_URL || ""
-            }
-          }
-        );
-      } catch (error) {
-        console.error("Failed to set configurator_app_url metafield:", error);
-      }
-    }
-  }
+  ...process.env.SHOP_CUSTOM_DOMAIN ? { customShopDomains: [process.env.SHOP_CUSTOM_DOMAIN] } : {}
 });
 const apiVersion = ApiVersion.October25;
 const addDocumentResponseHeaders = shopify.addDocumentResponseHeaders;
