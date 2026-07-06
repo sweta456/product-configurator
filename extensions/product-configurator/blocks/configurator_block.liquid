@@ -1,7 +1,7 @@
 {%- liquid
   assign base_url = block.settings.app_url_override | strip
   if base_url == blank
-    assign base_url = app.metafields.configurator_app_url.value | strip
+    assign base_url = 'https://product-configurator-production-3eef.up.railway.app'
   endif
   assign configurator_url = ''
   if base_url != blank and product
