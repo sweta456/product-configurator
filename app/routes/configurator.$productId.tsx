@@ -20,11 +20,14 @@ import {
   type ConfiguratorStyle,
   type AppSettings,
   type LogicRule,
+  type PricingData,
   getLayerSrc,
   migrateOptions,
   evaluateLogicRules,
+  computeConfiguratorPrice,
   DEFAULT_STYLE,
   DEFAULT_APP_SETTINGS,
+  DEFAULT_PRICING,
 } from "../types/configurator";
 
 export const headers: HeadersFunction = () => ({
@@ -41,6 +44,7 @@ const COORD_SCALE = CANVAS_SIZE / 800;
 export async function loader({ request, params }: any) {
   const url = new URL(request.url);
   const shop = url.searchParams.get("shop");
+  const currencyCode = url.searchParams.get("currency") || "USD";
   const numericId = params.productId;
 
   if (!shop) throw new Response("Missing shop parameter", { status: 400 });
@@ -55,7 +59,7 @@ export async function loader({ request, params }: any) {
   const appSettings: AppSettings = { ...DEFAULT_APP_SETTINGS, ...((appSettingsRecord?.settings as any) ?? {}) };
 
   if (!config) {
-    return { config: null, productName: "Product", productId, appSettings, shop };
+    return { config: null, productName: "Product", productId, appSettings, shop, currencyCode };
   }
 
   const opts = (config as any).options ?? {};
@@ -72,6 +76,7 @@ export async function loader({ request, params }: any) {
     glbUrl,
     appSettings,
     shop,
+    currencyCode,
   };
 }
 
@@ -408,7 +413,7 @@ function ImageDropdown({ q, selectedVals, onToggle, onHoverImages }: {
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function StorefrontConfiguratorPage() {
-  const { config, productName, configuratorStyle, modelMode, glbUrl, appSettings, shop } = useLoaderData() as any;
+  const { config, productName, productId, configuratorStyle, modelMode, glbUrl, appSettings, shop, currencyCode } = useLoaderData() as any;
   const appSet: AppSettings = { ...DEFAULT_APP_SETTINGS, ...(appSettings ?? {}) };
   // appSet provides global defaults; per-product configuratorStyle overrides them
   const cfStyle: ConfiguratorStyle = {
@@ -436,6 +441,10 @@ export default function StorefrontConfiguratorPage() {
   const logicRules: LogicRule[] = (config?.options as any)?.logicRules ?? [];
   const numViews: number = (config?.options as any)?.numViews ?? 1;
 
+  const pricing: PricingData = { ...DEFAULT_PRICING, ...((config?.options as any)?.pricing ?? {}) };
+  const pricingActive = pricing.basePrice > 0 || pricing.extraPrices.length > 0 || pricing.equations.length > 0;
+  const numericProductId = productId.split("/").pop();
+
   const [currentView, setCurrentView] = useState(0);
 
   const [selectedAnswers, setSelectedAnswers] = useState<Record<string, string>>(() => {
@@ -451,6 +460,22 @@ export default function StorefrontConfiguratorPage() {
     }
     return init;
   });
+
+  const currentTotal = useMemo(
+    () => computeConfiguratorPrice(pricing, selectedAnswers),
+    [pricing, selectedAnswers],
+  );
+
+  const formattedTotal = useMemo(() => {
+    try {
+      return new Intl.NumberFormat("en", { style: "currency", currency: currencyCode }).format(currentTotal);
+    } catch {
+      return `${currencyCode} ${currentTotal.toFixed(2)}`;
+    }
+  }, [currentTotal, currencyCode]);
+
+  const [checkoutError, setCheckoutError] = useState<string | null>(null);
+  const [checkoutLoading, setCheckoutLoading] = useState(false);
 
   const [layerColors, setLayerColors] = useState<Record<string, string>>({});
 
@@ -770,6 +795,7 @@ export default function StorefrontConfiguratorPage() {
     }
 
     setSelectedId(null);
+    setCheckoutError(null);
 
     setTimeout(async () => {
       const previewDataUrl = stageRef.current?.toDataURL({ pixelRatio: 2 });
@@ -791,6 +817,29 @@ export default function StorefrontConfiguratorPage() {
         } catch {
           // Non-fatal
         }
+      }
+
+      if (pricingActive) {
+        setCheckoutLoading(true);
+        try {
+          const customAttributes = Object.entries(properties).map(([key, value]) => ({ key, value }));
+          const resp = await fetch(`/configurator/${numericProductId}/checkout?shop=${encodeURIComponent(shop)}`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ selectedAnswers, customAttributes }),
+          });
+          const data = await resp.json();
+          if (data.invoiceUrl) {
+            window.top!.location.href = data.invoiceUrl;
+          } else {
+            setCheckoutError(data.error || "Could not start checkout. Please try again.");
+            setCheckoutLoading(false);
+          }
+        } catch {
+          setCheckoutError("Could not start checkout. Please check your connection and try again.");
+          setCheckoutLoading(false);
+        }
+        return;
       }
 
       window.parent.postMessage(
@@ -1319,14 +1368,32 @@ export default function StorefrontConfiguratorPage() {
               background: isMobile ? "transparent" : "linear-gradient(180deg, var(--cf-surface) 0%, #f8f9ff 100%)",
               flexShrink: 0,
             }}>
+              {pricingActive && (
+                <div style={{
+                  display: "flex", alignItems: "center", justifyContent: "space-between",
+                  padding: "0 2px 10px", fontSize: 14, color: "var(--cf-text, #111827)",
+                }}>
+                  <span style={{ fontWeight: 500 }}>Total</span>
+                  <span style={{ fontWeight: 700, fontSize: 17 }}>{formattedTotal}</span>
+                </div>
+              )}
+              {checkoutError && (
+                <div style={{
+                  padding: "8px 12px", marginBottom: 8, borderRadius: 6,
+                  background: "#fef2f2", border: "1px solid #fecaca", color: "#991b1b", fontSize: 13,
+                }}>
+                  {checkoutError}
+                </div>
+              )}
               <button
                 onClick={handleAddToCart}
+                disabled={checkoutLoading}
                 className="cf-add-btn"
                 style={{
                   width: "100%", padding: "15px 20px",
                   color: "#fff", border: "none", borderRadius: "var(--cf-btn-radius, var(--cf-radius))",
-                  fontWeight: 700, fontSize: 14, cursor: "pointer",
-                  letterSpacing: "0.02em",
+                  fontWeight: 700, fontSize: 14, cursor: checkoutLoading ? "wait" : "pointer",
+                  letterSpacing: "0.02em", opacity: checkoutLoading ? 0.7 : 1,
                   display: "flex", alignItems: "center", justifyContent: "center", gap: 9,
                 }}
               >

@@ -5,7 +5,7 @@
   endif
   assign configurator_url = ''
   if base_url != blank and product
-    assign configurator_url = base_url | append: '/configurator/' | append: product.id | append: '?shop=' | append: shop.permanent_domain
+    assign configurator_url = base_url | append: '/configurator/' | append: product.id | append: '?shop=' | append: shop.permanent_domain | append: '&currency=' | append: shop.currency
   endif
 -%}
 
