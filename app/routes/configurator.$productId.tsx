@@ -41,6 +41,7 @@ const COORD_SCALE = CANVAS_SIZE / 800;
 export async function loader({ request, params }: any) {
   const url = new URL(request.url);
   const shop = url.searchParams.get("shop");
+  const currencyCode = url.searchParams.get("currency") || "USD";
   const numericId = params.productId;
 
   if (!shop) throw new Response("Missing shop parameter", { status: 400 });
@@ -55,7 +56,7 @@ export async function loader({ request, params }: any) {
   const appSettings: AppSettings = { ...DEFAULT_APP_SETTINGS, ...((appSettingsRecord?.settings as any) ?? {}) };
 
   if (!config) {
-    return { config: null, productName: "Product", productId, appSettings, shop };
+    return { config: null, productName: "Product", productId, appSettings, shop, currencyCode };
   }
 
   const opts = (config as any).options ?? {};
@@ -72,6 +73,7 @@ export async function loader({ request, params }: any) {
     glbUrl,
     appSettings,
     shop,
+    currencyCode,
   };
 }
 
