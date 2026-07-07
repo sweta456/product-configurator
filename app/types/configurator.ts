@@ -386,6 +386,99 @@ export function evaluateLogicRules(
   return { hiddenQuestions, unavailableAnswers };
 }
 
+export type PriceOperator = "+" | "-" | "×" | "÷";
+
+export interface ExtraPrice {
+  id: string;
+  questionId: string;
+  answerId: string;
+  price: number;
+}
+
+export interface EquationLine {
+  id: string;
+  type: "question" | "number";
+  questionId?: string;
+  numberValue?: number;
+}
+
+export interface Equation {
+  id: string;
+  displayCumulative: boolean;
+  lines: EquationLine[];
+  operators: PriceOperator[];
+  minResult: number | null;
+  maxResult: number | null;
+}
+
+export interface PricingData {
+  basePrice: number;
+  displayTaxes: boolean;
+  extraPrices: ExtraPrice[];
+  equations: Equation[];
+}
+
+export const DEFAULT_PRICING: PricingData = {
+  basePrice: 0,
+  displayTaxes: false,
+  extraPrices: [],
+  equations: [],
+};
+
+/**
+ * Single source of truth for configurator pricing math -- used both for the
+ * live on-screen total and the authoritative server-side charge, so the two
+ * can never drift apart.
+ */
+export function computeConfiguratorPrice(
+  pricing: PricingData,
+  selectedAnswers: Record<string, string>,
+): number {
+  const extraPriceForQuestion = (questionId: string): number => {
+    const answerId = selectedAnswers[questionId];
+    if (!answerId) return 0;
+    const match = pricing.extraPrices.find(
+      (ep) => ep.questionId === questionId && ep.answerId === answerId,
+    );
+    return match?.price ?? 0;
+  };
+
+  let total = pricing.basePrice;
+
+  for (const ep of pricing.extraPrices) {
+    if (selectedAnswers[ep.questionId] === ep.answerId) {
+      total += ep.price;
+    }
+  }
+
+  for (const eq of pricing.equations) {
+    if (eq.lines.length === 0) continue;
+
+    const lineValue = (line: EquationLine): number =>
+      line.type === "number"
+        ? (line.numberValue ?? 0)
+        : extraPriceForQuestion(line.questionId ?? "");
+
+    let result = lineValue(eq.lines[0]);
+    for (let i = 1; i < eq.lines.length; i++) {
+      const op = eq.operators[i - 1] ?? "+";
+      const value = lineValue(eq.lines[i]);
+      if (op === "+") result += value;
+      else if (op === "-") result -= value;
+      else if (op === "×") result *= value;
+      else if (op === "÷") result = value === 0 ? result : result / value;
+    }
+
+    const min = eq.minResult ?? -Infinity;
+    const max = eq.maxResult ?? Infinity;
+    result = Math.min(Math.max(result, min), max);
+
+    total += result;
+  }
+
+  return Math.round(total * 100) / 100;
+}
+
 const ALL_DISPLAY_TYPES = ["none", "image", "color", "logo", "text", "font", "font-size", "text-color", "text-outline"] as const;
 const VISUAL_DISPLAY_TYPES = ["image", "color", "logo", "text", "font", "font-size", "text-color", "text-outline"] as const;
 
