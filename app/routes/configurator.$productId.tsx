@@ -443,7 +443,6 @@ export default function StorefrontConfiguratorPage() {
 
   const pricing: PricingData = { ...DEFAULT_PRICING, ...((config?.options as any)?.pricing ?? {}) };
   const pricingActive = pricing.basePrice > 0 || pricing.extraPrices.length > 0 || pricing.equations.length > 0;
-  const numericProductId = productId.split("/").pop();
 
   const [currentView, setCurrentView] = useState(0);
 
@@ -473,9 +472,6 @@ export default function StorefrontConfiguratorPage() {
       return `${currencyCode} ${currentTotal.toFixed(2)}`;
     }
   }, [currentTotal, currencyCode]);
-
-  const [checkoutError, setCheckoutError] = useState<string | null>(null);
-  const [checkoutLoading, setCheckoutLoading] = useState(false);
 
   const [layerColors, setLayerColors] = useState<Record<string, string>>({});
 
@@ -795,7 +791,6 @@ export default function StorefrontConfiguratorPage() {
     }
 
     setSelectedId(null);
-    setCheckoutError(null);
 
     setTimeout(async () => {
       const previewDataUrl = stageRef.current?.toDataURL({ pixelRatio: 2 });
@@ -817,29 +812,6 @@ export default function StorefrontConfiguratorPage() {
         } catch {
           // Non-fatal
         }
-      }
-
-      if (pricingActive) {
-        setCheckoutLoading(true);
-        try {
-          const customAttributes = Object.entries(properties).map(([key, value]) => ({ key, value }));
-          const resp = await fetch(`/configurator/${numericProductId}/checkout?shop=${encodeURIComponent(shop)}`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ selectedAnswers, customAttributes }),
-          });
-          const data = await resp.json();
-          if (data.invoiceUrl) {
-            window.top!.location.href = data.invoiceUrl;
-          } else {
-            setCheckoutError(data.error || "Could not start checkout. Please try again.");
-            setCheckoutLoading(false);
-          }
-        } catch {
-          setCheckoutError("Could not start checkout. Please check your connection and try again.");
-          setCheckoutLoading(false);
-        }
-        return;
       }
 
       window.parent.postMessage(
@@ -1377,23 +1349,14 @@ export default function StorefrontConfiguratorPage() {
                   <span style={{ fontWeight: 700, fontSize: 17 }}>{formattedTotal}</span>
                 </div>
               )}
-              {checkoutError && (
-                <div style={{
-                  padding: "8px 12px", marginBottom: 8, borderRadius: 6,
-                  background: "#fef2f2", border: "1px solid #fecaca", color: "#991b1b", fontSize: 13,
-                }}>
-                  {checkoutError}
-                </div>
-              )}
               <button
                 onClick={handleAddToCart}
-                disabled={checkoutLoading}
                 className="cf-add-btn"
                 style={{
                   width: "100%", padding: "15px 20px",
                   color: "#fff", border: "none", borderRadius: "var(--cf-btn-radius, var(--cf-radius))",
-                  fontWeight: 700, fontSize: 14, cursor: checkoutLoading ? "wait" : "pointer",
-                  letterSpacing: "0.02em", opacity: checkoutLoading ? 0.7 : 1,
+                  fontWeight: 700, fontSize: 14, cursor: "pointer",
+                  letterSpacing: "0.02em",
                   display: "flex", alignItems: "center", justifyContent: "center", gap: 9,
                 }}
               >
