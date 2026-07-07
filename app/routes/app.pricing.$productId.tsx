@@ -2,41 +2,16 @@ import { useLoaderData, useSubmit, useActionData, Link } from "react-router";
 import { useState, useRef, useCallback, useEffect } from "react";
 import { authenticate } from "../shopify.server";
 import prisma from "../db.server";
-import { type Question, getQuestionAnswers, migrateOptions } from "../types/configurator";
-
-// ─── Types ────────────────────────────────────────────────────────────────────
-
-interface ExtraPrice {
-  id: string;
-  questionId: string;
-  answerId: string;
-  price: number;
-}
-
-type Operator = "+" | "-" | "×" | "÷";
-
-interface EquationLine {
-  id: string;
-  type: "question" | "number";
-  questionId?: string;
-  numberValue?: number;
-}
-
-interface Equation {
-  id: string;
-  displayCumulative: boolean;
-  lines: EquationLine[];
-  operators: Operator[];
-  minResult: number | null;
-  maxResult: number | null;
-}
-
-interface PricingData {
-  basePrice: number;
-  displayTaxes: boolean;
-  extraPrices: ExtraPrice[];
-  equations: Equation[];
-}
+import {
+  type Question,
+  type PriceOperator as Operator,
+  type ExtraPrice,
+  type EquationLine,
+  type Equation,
+  type PricingData,
+  getQuestionAnswers,
+  migrateOptions,
+} from "../types/configurator";
 
 // ─── Loader ───────────────────────────────────────────────────────────────────
 
