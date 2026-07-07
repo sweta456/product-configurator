@@ -1,31 +1,20 @@
-import { writeFileSync, mkdirSync, existsSync, readdirSync, statSync, unlinkSync } from "fs";
-import { join } from "path";
+import { unauthenticated } from "../shopify.server";
+import { uploadFileToShopify } from "../utils/shopifyFiles.server";
 
-const KEEP_DAYS = 10;
-const KEEP_MS   = KEEP_DAYS * 24 * 60 * 60 * 1000;
-
-// Delete preview files older than KEEP_DAYS. Runs on every upload so no
-// separate cron job is needed — old files are pruned as new ones come in.
-function cleanupOldPreviews(uploadsDir: string) {
-  try {
-    const cutoff = Date.now() - KEEP_MS;
-    for (const file of readdirSync(uploadsDir)) {
-      if (!file.startsWith("preview-")) continue;
-      const filePath = join(uploadsDir, file);
-      if (statSync(filePath).mtimeMs < cutoff) {
-        unlinkSync(filePath);
-      }
-    }
-  } catch {
-    // Non-fatal — cleanup failure should never block an upload
-  }
-}
-
-// Public (no auth) endpoint — the storefront iframe POSTs the canvas screenshot
-// here to get a short-lived URL stored as a Shopify line item property.
+// Public (no admin session) endpoint -- the storefront iframe POSTs the
+// canvas screenshot here to get a URL stored as a Shopify line item
+// property. Uses the app's stored offline access token for the given shop
+// (via unauthenticated.admin) since there's no interactive admin session
+// on a customer-facing request.
 export async function action({ request }: any) {
   if (request.method !== "POST") {
     return Response.json({ error: "Method not allowed" }, { status: 405 });
+  }
+
+  const url = new URL(request.url);
+  const shop = url.searchParams.get("shop");
+  if (!shop) {
+    return Response.json({ error: "Missing shop parameter" }, { status: 400 });
   }
 
   try {
@@ -39,23 +28,31 @@ export async function action({ request }: any) {
     const base64Data = dataUrl.replace(/^data:image\/\w+;base64,/, "");
     const buffer = Buffer.from(base64Data, "base64");
 
-    // 5 MB limit (canvas screenshots are typically 200–800 KB at 2× pixel ratio)
+    // 5 MB limit (canvas screenshots are typically 200-800 KB at 2x pixel ratio)
     if (buffer.length > 5 * 1024 * 1024) {
       return Response.json({ error: "Image too large" }, { status: 413 });
     }
 
-    const uploadsDir = join(process.cwd(), "public", "uploads");
-    if (!existsSync(uploadsDir)) {
-      mkdirSync(uploadsDir, { recursive: true });
+    let admin;
+    try {
+      ({ admin } = await unauthenticated.admin(shop));
+    } catch {
+      return Response.json({ error: "Unable to process this store's request" }, { status: 502 });
     }
 
-    // Prune files older than 10 days before writing the new one
-    cleanupOldPreviews(uploadsDir);
-
     const filename = `preview-${Date.now()}-${Math.random().toString(36).slice(2)}.png`;
-    writeFileSync(join(uploadsDir, filename), buffer);
+    const result = await uploadFileToShopify(admin, {
+      buffer,
+      filename,
+      mimeType: "image/png",
+      resourceType: "IMAGE",
+    });
 
-    return Response.json({ url: `/uploads/${filename}` });
+    if ("error" in result) {
+      return Response.json({ error: result.error }, { status: 502 });
+    }
+
+    return Response.json({ url: result.url });
   } catch (err: any) {
     return Response.json({ error: err.message ?? "Upload failed" }, { status: 500 });
   }

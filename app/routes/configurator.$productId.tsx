@@ -55,7 +55,7 @@ export async function loader({ request, params }: any) {
   const appSettings: AppSettings = { ...DEFAULT_APP_SETTINGS, ...((appSettingsRecord?.settings as any) ?? {}) };
 
   if (!config) {
-    return { config: null, productName: "Product", productId, appSettings };
+    return { config: null, productName: "Product", productId, appSettings, shop };
   }
 
   const opts = (config as any).options ?? {};
@@ -71,6 +71,7 @@ export async function loader({ request, params }: any) {
     modelMode,
     glbUrl,
     appSettings,
+    shop,
   };
 }
 
@@ -407,7 +408,7 @@ function ImageDropdown({ q, selectedVals, onToggle, onHoverImages }: {
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function StorefrontConfiguratorPage() {
-  const { config, productName, configuratorStyle, modelMode, glbUrl, appSettings } = useLoaderData() as any;
+  const { config, productName, configuratorStyle, modelMode, glbUrl, appSettings, shop } = useLoaderData() as any;
   const appSet: AppSettings = { ...DEFAULT_APP_SETTINGS, ...(appSettings ?? {}) };
   // appSet provides global defaults; per-product configuratorStyle overrides them
   const cfStyle: ConfiguratorStyle = {
@@ -776,14 +777,14 @@ export default function StorefrontConfiguratorPage() {
       let previewUrl = "";
       if (previewDataUrl) {
         try {
-          const resp = await fetch("/upload-preview", {
+          const resp = await fetch(`/upload-preview?shop=${encodeURIComponent(shop)}`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ dataUrl: previewDataUrl }),
           });
           const data = await resp.json();
           if (data.url) {
-            previewUrl = window.location.origin + data.url;
+            previewUrl = data.url;
             properties["Preview Image"] = previewUrl;
             properties["_preview"] = previewUrl;
           }

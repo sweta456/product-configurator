@@ -1,10 +1,9 @@
-import { writeFileSync, mkdirSync, existsSync } from "fs";
-import { join } from "path";
 import { authenticate } from "../shopify.server";
+import { uploadFileToShopify } from "../utils/shopifyFiles.server";
 
 export async function action({ request }: any) {
   // Verify the request is from an authenticated admin session
-  await authenticate.admin(request);
+  const { admin } = await authenticate.admin(request);
 
   const formData = await request.formData();
   const file = formData.get("file") as File;
@@ -16,21 +15,20 @@ export async function action({ request }: any) {
   try {
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
+    const mimeType = file.type || "image/png";
 
-    // Ensure public/uploads directory exists
-    const uploadsDir = join(process.cwd(), "public", "uploads");
-    if (!existsSync(uploadsDir)) {
-      mkdirSync(uploadsDir, { recursive: true });
+    const result = await uploadFileToShopify(admin, {
+      buffer,
+      filename: file.name,
+      mimeType,
+      resourceType: "IMAGE",
+    });
+
+    if ("error" in result) {
+      return Response.json({ error: result.error }, { status: 502 });
     }
 
-    // Unique filename to avoid collisions
-    const ext = file.name.split(".").pop()?.toLowerCase() || "png";
-    const filename = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
-    const filePath = join(uploadsDir, filename);
-
-    writeFileSync(filePath, buffer);
-
-    return Response.json({ url: `/uploads/${filename}` });
+    return Response.json({ url: result.url });
   } catch (err: any) {
     return Response.json(
       { error: err.message ?? "Upload failed" },

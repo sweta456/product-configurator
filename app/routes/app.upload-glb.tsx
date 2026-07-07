@@ -1,9 +1,8 @@
-import { writeFileSync, mkdirSync, existsSync } from "fs";
-import { join } from "path";
 import { authenticate } from "../shopify.server";
+import { uploadFileToShopify } from "../utils/shopifyFiles.server";
 
 export async function action({ request }: any) {
-  await authenticate.admin(request);
+  const { admin } = await authenticate.admin(request);
 
   const formData = await request.formData();
   const file = formData.get("file") as File;
@@ -21,13 +20,18 @@ export async function action({ request }: any) {
     const bytes = await file.arrayBuffer();
     const buffer = Buffer.from(bytes);
 
-    const uploadsDir = join(process.cwd(), "public", "uploads");
-    if (!existsSync(uploadsDir)) mkdirSync(uploadsDir, { recursive: true });
+    const result = await uploadFileToShopify(admin, {
+      buffer,
+      filename: file.name,
+      mimeType: "model/gltf-binary",
+      resourceType: "MODEL_3D",
+    });
 
-    const filename = `${Date.now()}-${Math.random().toString(36).slice(2)}.glb`;
-    writeFileSync(join(uploadsDir, filename), buffer);
+    if ("error" in result) {
+      return Response.json({ error: result.error }, { status: 502 });
+    }
 
-    return Response.json({ url: `/uploads/${filename}` });
+    return Response.json({ url: result.url });
   } catch (err: any) {
     return Response.json({ error: err.message ?? "Upload failed" }, { status: 500 });
   }
