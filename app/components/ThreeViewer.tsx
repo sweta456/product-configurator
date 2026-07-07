@@ -1,4 +1,4 @@
-import { useRef, useEffect, forwardRef, useImperativeHandle, useMemo, Suspense } from "react";
+import { useRef, useState, useEffect, forwardRef, useImperativeHandle, useMemo, Suspense, Component, type ReactNode } from "react";
 import { Canvas, useThree } from "@react-three/fiber";
 import { OrbitControls, useGLTF, Bounds, useBounds } from "@react-three/drei";
 import * as THREE from "three";
@@ -222,6 +222,33 @@ function GlbScene({ glbUrl, parts, customizations, selectedPartId, hoveredPartId
   );
 }
 
+// ─── Model load error boundary ───────────────────────────────────────────────
+// useGLTF throws when the .glb fetch fails (e.g. a 404). Suspense only covers
+// the loading state, not errors, so without this the failure crashes the
+// entire page instead of just this viewer.
+
+interface ModelErrorBoundaryState {
+  hasError: boolean;
+}
+
+class ModelErrorBoundary extends Component<{ children: ReactNode; onError: () => void }, ModelErrorBoundaryState> {
+  state: ModelErrorBoundaryState = { hasError: false };
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: unknown) {
+    console.error("Failed to load 3D model:", error);
+    this.props.onError();
+  }
+
+  render() {
+    if (this.state.hasError) return null;
+    return this.props.children;
+  }
+}
+
 // ─── Public component ─────────────────────────────────────────────────────────
 
 interface ThreeViewerProps {
@@ -241,10 +268,29 @@ interface ThreeViewerProps {
 export const ThreeViewer = forwardRef<ThreeViewerHandle, ThreeViewerProps>(
   function ThreeViewer({ glbUrl, parts, customizations, width = 560, height = 560, selectedPartId, hoveredPartIds, onPartClick }, ref) {
     const glRef = useRef<THREE.WebGLRenderer | null>(null);
+    const [modelError, setModelError] = useState(false);
 
     useImperativeHandle(ref, () => ({
       toDataURL: () => glRef.current?.domElement.toDataURL("image/png") ?? "",
     }));
+
+    if (modelError) {
+      return (
+        <div style={{
+          width, height, borderRadius: 8, overflow: "hidden", background: "#f9fafb",
+          display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+          gap: 8, padding: 20, boxSizing: "border-box", textAlign: "center",
+        }}>
+          <span style={{ fontSize: 28 }} aria-hidden="true">⚠️</span>
+          <span style={{ fontSize: 13, color: "#374151", fontWeight: 600 }}>
+            Unable to load the 3D preview
+          </span>
+          <span style={{ fontSize: 12, color: "#9ca3af" }}>
+            Please contact the store if this keeps happening.
+          </span>
+        </div>
+      );
+    }
 
     return (
       <div style={{ width, height, borderRadius: 8, overflow: "hidden", background: "#ffffff", cursor: "grab" }}>
@@ -254,16 +300,18 @@ export const ThreeViewer = forwardRef<ThreeViewerHandle, ThreeViewerProps>(
           style={{ width: "100%", height: "100%" }}
           onCreated={({ gl }) => { glRef.current = gl; }}
         >
-          <Suspense fallback={null}>
-            <GlbScene
-              glbUrl={glbUrl}
-              parts={parts}
-              customizations={customizations}
-              selectedPartId={selectedPartId}
-              hoveredPartIds={hoveredPartIds}
-              onPartClick={onPartClick}
-            />
-          </Suspense>
+          <ModelErrorBoundary onError={() => setModelError(true)}>
+            <Suspense fallback={null}>
+              <GlbScene
+                glbUrl={glbUrl}
+                parts={parts}
+                customizations={customizations}
+                selectedPartId={selectedPartId}
+                hoveredPartIds={hoveredPartIds}
+                onPartClick={onPartClick}
+              />
+            </Suspense>
+          </ModelErrorBoundary>
           <OrbitControls makeDefault enablePan={false} minDistance={0.5} maxDistance={20} />
         </Canvas>
       </div>
