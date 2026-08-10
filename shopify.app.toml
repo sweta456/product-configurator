@@ -25,7 +25,9 @@ api_version = "2026-04"
 [auth]
 redirect_urls = [
   "https://product-configurator-production-3eef.up.railway.app/auth/callback",
-  "https://product-configurator-production-3eef.up.railway.app/api/auth/callback"
+  "https://product-configurator-production-3eef.up.railway.app/api/auth/callback",
+  "https://product-configurator-black.vercel.app/auth/callback",
+  "https://product-configurator-black.vercel.app/api/auth/callback"
 ]
 
 [build]
