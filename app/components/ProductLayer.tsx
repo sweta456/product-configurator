@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Image as KonvaImage } from "react-konva";
+import { Image as KonvaImage } from "../utils/react-konva.client";
 import useImage from "use-image";
 
 interface ProductLayerProps {

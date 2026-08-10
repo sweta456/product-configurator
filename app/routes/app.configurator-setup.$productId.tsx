@@ -1,6 +1,6 @@
 import { useLoaderData, useSubmit, useActionData, Link, useFetcher, useNavigate, useNavigation } from "react-router";
 import { useState, useEffect, useMemo, useRef } from "react";
-import { Stage, Layer as KonvaLayer, Text as KonvaText, Rect, Transformer, Group } from "react-konva";
+import { Stage, Layer as KonvaLayer, Text as KonvaText, Rect, Transformer, Group } from "../utils/react-konva.client";
 import ProductLayer from "../components/ProductLayer";
 import { ModernColorPicker } from "../components/ModernColorPicker";
 import { GlbPartSetup } from "../components/GlbPartSetup";

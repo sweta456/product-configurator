@@ -1,6 +1,6 @@
 import { useLoaderData, Link } from "react-router";
 import { useState, useRef, useEffect, useMemo } from "react";
-import { Stage, Layer as KonvaLayer, Text as KonvaText, Image as KonvaImage, Transformer } from "react-konva";
+import { Stage, Layer as KonvaLayer, Text as KonvaText, Image as KonvaImage, Transformer } from "../utils/react-konva.client";
 import ProductLayer from "../components/ProductLayer";
 import { ThreeViewer, type PartCustomization } from "../components/ThreeViewer";
 import { authenticate } from "../shopify.server";
@@ -165,6 +165,8 @@ export default function ConfiguratorPage() {
   const stageRef = useRef<any>(null);
   const transformerRef = useRef<any>(null);
   const [nodeRefs] = useState<Record<string, any>>({});
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
   const layers: LayerConfig[] = (config?.layers as LayerConfig[]) ?? [];
   const questions: Question[] = migrateOptions(config?.options, layers);
@@ -656,7 +658,7 @@ export default function ConfiguratorPage() {
             height={CANVAS_SIZE}
             hoveredPartIds={hoveredPartIds}
           />
-        ) : (
+        ) : mounted ? (
         <Stage
           width={CANVAS_SIZE} height={CANVAS_SIZE}
           ref={stageRef}
@@ -753,7 +755,7 @@ export default function ConfiguratorPage() {
             <Transformer ref={transformerRef} boundBoxFunc={(old, nw) => (nw.width < 20 || nw.height < 20 ? old : nw)} />
           </KonvaLayer>
         </Stage>
-        )}
+        ) : null}
 
         {/* View navigation dots with prev/next arrows */}
         {numViews > 1 && (

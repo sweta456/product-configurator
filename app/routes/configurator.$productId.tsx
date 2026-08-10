@@ -6,7 +6,7 @@ import {
   Text as KonvaText,
   Image as KonvaImage,
   Transformer,
-} from "react-konva";
+} from "../utils/react-konva.client";
 import ProductLayer from "../components/ProductLayer";
 import { ThreeViewer, type PartCustomization } from "../components/ThreeViewer";
 import prisma from "../db.server";
