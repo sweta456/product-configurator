@@ -1,4 +1,5 @@
-import { Link } from "react-router";
+import { Link, useLoaderData, useFetcher } from "react-router";
+import { useState } from "react";
 import {
   Page,
   Layout,
@@ -18,13 +19,44 @@ import {
   ChevronRightIcon,
   StarFilledIcon,
 } from "@shopify/polaris-icons";
+import { authenticate } from "../shopify.server";
+import prisma from "../db.server";
+import WelcomeModal from "../components/WelcomeModal";
+
+export async function loader({ request }: any) {
+  const { session } = await authenticate.admin(request);
+  const store = await prisma.store.findUnique({ where: { shop: session.shop } });
+  return {
+    hasSeenWelcome: store?.hasSeenWelcome ?? true,
+    videoUrl: process.env.WELCOME_VIDEO_URL || null,
+  };
+}
+
+export async function action({ request }: any) {
+  const { session } = await authenticate.admin(request);
+  await prisma.store.update({ where: { shop: session.shop }, data: { hasSeenWelcome: true } });
+  return null;
+}
 
 export default function HomePage() {
+  const { hasSeenWelcome, videoUrl } = useLoaderData<typeof loader>();
+  const dismissFetcher = useFetcher();
+  const [modalOpen, setModalOpen] = useState(!hasSeenWelcome);
+
+  const closeModal = () => {
+    setModalOpen(false);
+    if (!hasSeenWelcome) {
+      dismissFetcher.submit({}, { method: "post" });
+    }
+  };
+
   return (
     <Page
       title="Product Configurator"
       subtitle="Let customers personalise your products with custom colors, text & logos"
+      secondaryActions={[{ content: "Watch demo", onAction: () => setModalOpen(true) }]}
     >
+      <WelcomeModal open={modalOpen} onClose={closeModal} videoUrl={videoUrl} />
       <BlockStack gap="600">
 
         {/* Feature Cards */}
