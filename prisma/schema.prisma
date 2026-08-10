@@ -8,12 +8,13 @@ datasource db {
 }
 
 model Store {
-  id            String         @id @default(cuid())
-  shop          String         @unique
-  accessToken   String
-  createdAt     DateTime       @default(now())
-  configurators Configurator[]
-  products      Product[]
+  id             String         @id @default(cuid())
+  shop           String         @unique
+  accessToken    String
+  hasSeenWelcome Boolean        @default(false)
+  createdAt      DateTime       @default(now())
+  configurators  Configurator[]
+  products       Product[]
 }
 
 model Product {

@@ -1,0 +1,1 @@
+ALTER TABLE "Store" ADD COLUMN "hasSeenWelcome" BOOLEAN NOT NULL DEFAULT false;
