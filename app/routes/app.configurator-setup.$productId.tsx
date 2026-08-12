@@ -4196,7 +4196,7 @@ export default function BuilderPage() {
         newLayer = {
           id, name, type: "static", src: "",
           displayType: tq.displayType ?? "image",
-          answers: (tq.swatches ?? []).map((s) => ({ id: s.value, label: s.label, thumbnailUrl: s.imageUrl, viewImages: s.viewImages, description: s.description, productionCode: s.productionCode })),
+          answers: (tq.swatches ?? []).map((s) => ({ id: s.value, label: s.label, imageUrl: s.imageUrl, viewImages: s.viewImages, description: s.description, productionCode: s.productionCode })),
           applyOn: tq.applyOn,
         };
         break;
