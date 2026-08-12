@@ -68,7 +68,17 @@ Out of scope (explicitly not touched):
 
 - New toggle "Behind the scene" in the Thumbnail question detail panel,
   shown only when `displayType === "color"` (same condition that currently
-  gates the "Apply on" section, ~line 1031). Wired to `q.hidden`.
+  gates the "Apply on" section, ~line 1031). Wired to `q.hidden`. This lets
+  any question — however it was created — be moved in or out of Behind the
+  scene later.
+- `addLinkedLayer`'s color branch (~line 3945-3969), which creates a new
+  `ThumbnailQuestion` from within the Behind the scene panel (clicking a
+  part and adding its linked color question), now sets `hidden: true` on
+  the new question by default. This is the flow you get to by adding a
+  color question straight from a part in Behind the scene, so it should
+  never also land in the main Questions list. Questions created via the
+  normal "+ Add" button in the Questions panel still default to
+  `hidden: false` (unchanged) and can be flipped on via the toggle above.
 - Top Questions list rendering (~line 4237): skip any question where
   `hidden === true`.
 - `LayerRow`'s `linkedNames: string[]` prop becomes `linkedItems: {id, name}[]`.
