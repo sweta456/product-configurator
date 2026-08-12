@@ -437,10 +437,10 @@ function GroupRow({ q, selected, expanded, onToggle, onSelect, onDelete, onAddCh
 
 // ─── Left panel – Layer row ───────────────────────────────────────────────────
 
-function LayerRow({ layer, selected, linkedNames, onSelect, onRemove, onMoveToQuestions, onDuplicate, isDragging, isDragOver, onDragStart, onDragOver, onDrop, onDragEnd }: {
+function LayerRow({ layer, selected, linkedItems, onSelect, onSelectLinked, onRemove, onMoveToQuestions, onDuplicate, isDragging, isDragOver, onDragStart, onDragOver, onDrop, onDragEnd }: {
   layer: LayerConfig; selected: boolean;
-  linkedNames?: string[];
-  onSelect: () => void; onRemove: () => void;
+  linkedItems?: { id: string; name: string }[];
+  onSelect: () => void; onSelectLinked?: (id: string) => void; onRemove: () => void;
   onMoveToQuestions?: () => void; onDuplicate?: (mode: "import" | "copy") => void;
   isDragging?: boolean; isDragOver?: boolean;
   onDragStart?: () => void; onDragOver?: (e: React.DragEvent) => void; onDrop?: () => void; onDragEnd?: () => void;
@@ -551,10 +551,16 @@ function LayerRow({ layer, selected, linkedNames, onSelect, onRemove, onMoveToQu
         </div>,
         document.body
       )}
-      {linkedNames && linkedNames.length > 0 && (
-        <div style={{ paddingLeft: 36, paddingBottom: 4 }}>
-          {linkedNames.map((n) => (
-            <span key={n} style={{ fontSize: 11, color: "#9ca3af" }}>↳ {n}</span>
+      {linkedItems && linkedItems.length > 0 && (
+        <div style={{ paddingLeft: 36, paddingBottom: 4, display: "flex", flexDirection: "column", gap: 2 }}>
+          {linkedItems.map((item) => (
+            <span
+              key={item.id}
+              onClick={(e) => { e.stopPropagation(); onSelectLinked?.(item.id); }}
+              style={{ fontSize: 11, color: "#9ca3af", cursor: onSelectLinked ? "pointer" : "default" }}
+            >
+              ↳ {item.name}
+            </span>
           ))}
         </div>
       )}
@@ -4419,14 +4425,19 @@ export default function BuilderPage() {
             </div>
             <div style={{ flex: 1, overflowY: "auto", minHeight: 0 }}>
             {layers.filter((l) => l.type !== "glb-part").map((l, idx) => {
-              const forwardNames = (l.applyOn ?? []).map((qid) => questions.find((q) => q.id === qid)?.name).filter(Boolean) as string[];
-              const reverseNames = questions.filter((q) => (q as any).applyOn?.includes(l.id)).map((q) => q.name);
-              const allLinkedNames = [...new Set([...forwardNames, ...reverseNames])];
+              const forwardQs = (l.applyOn ?? []).map((qid) => questions.find((q) => q.id === qid)).filter((q): q is Question => !!q);
+              const reverseQs = questions.filter((q) => (q as any).applyOn?.includes(l.id));
+              const forwardLayers = (l.applyOn ?? []).map((lid) => layers.find((ol) => ol.id === lid && ol.id !== l.id)).filter((ol): ol is LayerConfig => !!ol);
+              const reverseLayers = layers.filter((ol) => ol.id !== l.id && (ol.applyOn ?? []).includes(l.id));
+              const linkedMap = new Map<string, string>();
+              for (const item of [...forwardQs, ...reverseQs, ...forwardLayers, ...reverseLayers]) linkedMap.set(item.id, item.name);
+              const linkedItems = Array.from(linkedMap, ([id, name]) => ({ id, name }));
               return (
                 <LayerRow key={l.id} layer={l}
                   selected={selected?.id === l.id}
-                  linkedNames={allLinkedNames}
+                  linkedItems={linkedItems}
                   onSelect={() => setSelected({ kind: "layer", id: l.id })}
+                  onSelectLinked={(id) => setSelected({ kind: questions.some((q) => q.id === id) ? "question" : "layer", id })}
                   onRemove={() => removeL(l.id)}
                   onMoveToQuestions={() => convertLayerToQuestion(l, "thumbnail")}
                   onDuplicate={(mode) => duplicateL(l.id, mode)}
