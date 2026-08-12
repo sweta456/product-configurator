@@ -436,16 +436,19 @@ function GroupRow({ q, selected, expanded, onToggle, onSelect, onDelete, onAddCh
 
 // ─── Left panel – Layer row ───────────────────────────────────────────────────
 
-function LayerRow({ layer, selected, linkedNames, onSelect, onRemove, isDragging, isDragOver, onDragStart, onDragOver, onDrop, onDragEnd }: {
+function LayerRow({ layer, selected, linkedNames, onSelect, onRemove, onMoveToQuestions, onDuplicate, isDragging, isDragOver, onDragStart, onDragOver, onDrop, onDragEnd }: {
   layer: LayerConfig; selected: boolean;
   linkedNames?: string[];
   onSelect: () => void; onRemove: () => void;
+  onMoveToQuestions?: () => void; onDuplicate?: (mode: "import" | "copy") => void;
   isDragging?: boolean; isDragOver?: boolean;
   onDragStart?: () => void; onDragOver?: (e: React.DragEvent) => void; onDrop?: () => void; onDragEnd?: () => void;
 }) {
   const dt = layer.displayType;
   const dtMeta = dt ? DISPLAY_TYPE_META[dt] : null;
   const dtBg = dt ? (LAYER_DISPLAY_COLORS[dt] ?? "#6b7280") : "#d1d5db";
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [duplicateOpen, setDuplicateOpen] = useState(false);
 
   return (
     <div
@@ -455,6 +458,7 @@ function LayerRow({ layer, selected, linkedNames, onSelect, onRemove, isDragging
       onDrop={onDrop}
       onDragEnd={onDragEnd}
       style={{ position: "relative", opacity: isDragging ? 0.35 : 1 }}
+      onMouseLeave={() => { setMenuOpen(false); setDuplicateOpen(false); }}
     >
       <div
         onClick={onSelect}
@@ -472,12 +476,49 @@ function LayerRow({ layer, selected, linkedNames, onSelect, onRemove, isDragging
           </span>
         )}
         <button
-          onClick={(e) => { e.stopPropagation(); onRemove(); }}
-          style={{ background: "none", border: "none", color: "#d1d5db", cursor: "pointer", fontSize: 14, lineHeight: 1, padding: 0 }}
+          onClick={(e) => { e.stopPropagation(); setMenuOpen((o) => !o); setDuplicateOpen(false); }}
+          style={{ background: "none", border: "none", color: "#9ca3af", cursor: "pointer", fontSize: 14, lineHeight: 1, padding: "2px 4px", flexShrink: 0, borderRadius: 4 }}
         >
-          ×
+          ⋮
         </button>
       </div>
+      {menuOpen && (
+        <div style={{ position: "absolute", right: 8, top: "100%", zIndex: 50, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 8, boxShadow: "0 4px 16px rgba(0,0,0,0.12)", minWidth: 200, overflow: "hidden" }}>
+          {onMoveToQuestions && (
+            <button onClick={(e) => { e.stopPropagation(); onMoveToQuestions(); setMenuOpen(false); }}
+              style={{ display: "block", width: "100%", textAlign: "left", padding: "9px 14px", border: "none", background: "none", cursor: "pointer", fontSize: 13, color: "#374151" }}>
+              Move to Question panel
+            </button>
+          )}
+          {onDuplicate && (
+            <div>
+              <button onClick={(e) => { e.stopPropagation(); setDuplicateOpen((o) => !o); }}
+                style={{ display: "flex", alignItems: "center", width: "100%", textAlign: "left", padding: "9px 14px", border: "none", background: duplicateOpen ? "#f9fafb" : "none", cursor: "pointer", fontSize: 13, color: "#374151" }}>
+                <span style={{ flex: 1 }}>Duplicate</span>
+                <span style={{ fontSize: 10, color: "#9ca3af" }}>{duplicateOpen ? "▾" : "▸"}</span>
+              </button>
+              {duplicateOpen && (
+                <div style={{ borderTop: "1px solid #f3f4f6" }}>
+                  <button onClick={(e) => { e.stopPropagation(); onDuplicate("import"); setMenuOpen(false); setDuplicateOpen(false); }}
+                    style={{ display: "block", width: "100%", textAlign: "left", padding: "8px 14px 8px 24px", border: "none", background: "none", cursor: "pointer" }}>
+                    <span style={{ display: "block", fontSize: 13, color: "#374151" }}>Import answers</span>
+                    <span style={{ display: "block", fontSize: 11, color: "#9ca3af" }}>Link the answers to the original</span>
+                  </button>
+                  <button onClick={(e) => { e.stopPropagation(); onDuplicate("copy"); setMenuOpen(false); setDuplicateOpen(false); }}
+                    style={{ display: "block", width: "100%", textAlign: "left", padding: "8px 14px 8px 24px", border: "none", background: "none", cursor: "pointer" }}>
+                    <span style={{ display: "block", fontSize: 13, color: "#374151" }}>Copy answers</span>
+                    <span style={{ display: "block", fontSize: 11, color: "#9ca3af" }}>Separate the answers from the original</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+          <button onClick={(e) => { e.stopPropagation(); onRemove(); setMenuOpen(false); }}
+            style={{ display: "block", width: "100%", textAlign: "left", padding: "9px 14px", border: "none", background: "none", cursor: "pointer", fontSize: 13, color: "#ef4444", borderTop: "1px solid #f3f4f6" }}>
+            Delete
+          </button>
+        </div>
+      )}
       {linkedNames && linkedNames.length > 0 && (
         <div style={{ paddingLeft: 36, paddingBottom: 4 }}>
           {linkedNames.map((n) => (
@@ -3964,6 +4005,18 @@ export default function BuilderPage() {
 
   const updateL = (u: LayerConfig) => setLayers((p) => p.map((l) => (l.id === u.id ? u : l)));
   const removeL = (id: string) => { setLayers((p) => p.filter((l) => l.id !== id)); if (selected?.id === id) setSelected(null); };
+  const duplicateL = (id: string, mode: "import" | "copy") => {
+    const src = layers.find((l) => l.id === id);
+    if (!src) return;
+    const newId = `${src.displayType ?? src.type}-${Date.now()}`;
+    // "copy" fully separates the answers from the original; "import" keeps
+    // the same answers array so the duplicate starts out identical, but
+    // future edits to either layer only ever touch that layer's own entry
+    // in `layers` — this isn't a live two-way sync, just a shared starting point.
+    const answers = mode === "copy" ? (src.answers ?? []).map((a) => ({ ...a })) : src.answers;
+    setLayers((p) => [...p, { ...src, id: newId, name: `${src.name} (copy)`, answers }]);
+    setSelected({ kind: "layer", id: newId });
+  };
   const addNewLayer = (layerType: "static" | "colorable", displayType: string) => {
     const baseName = DISPLAY_TYPE_META[displayType]?.label ?? displayType;
     const id = `${displayType}-${Date.now()}`;
@@ -4343,6 +4396,8 @@ export default function BuilderPage() {
                   linkedNames={allLinkedNames}
                   onSelect={() => setSelected({ kind: "layer", id: l.id })}
                   onRemove={() => removeL(l.id)}
+                  onMoveToQuestions={() => convertLayerToQuestion(l, "thumbnail")}
+                  onDuplicate={(mode) => duplicateL(l.id, mode)}
                   isDragging={dragLId === l.id} isDragOver={dragOverLId === l.id && dragLId !== l.id}
                   onDragStart={() => handleLDragStart(l.id)}
                   onDragOver={(e) => handleLDragOver(e, l.id)}
