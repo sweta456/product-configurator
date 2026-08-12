@@ -356,9 +356,10 @@ export function getQuestionAnswers(q: Question): { value: string; label: string 
 export function evaluateLogicRules(
   rules: LogicRule[],
   selectedAnswers: Record<string, string>,
-): { hiddenQuestions: Set<string>; unavailableAnswers: Map<string, Set<string>> } {
+): { hiddenQuestions: Set<string>; unavailableAnswers: Map<string, Set<string>>; forcedAnswers: Map<string, string> } {
   const hiddenQuestions = new Set<string>();
   const unavailableAnswers = new Map<string, Set<string>>();
+  const forcedAnswers = new Map<string, string>();
 
   for (const rule of rules) {
     const conditionsMet = rule.conditions.every((cond) => {
@@ -381,11 +382,13 @@ export function evaluateLogicRules(
       ) {
         if (!unavailableAnswers.has(action.questionId)) unavailableAnswers.set(action.questionId, new Set());
         unavailableAnswers.get(action.questionId)!.add(action.value);
+      } else if (action.effect === "should_be" && action.value) {
+        forcedAnswers.set(action.questionId, action.value);
       }
     }
   }
 
-  return { hiddenQuestions, unavailableAnswers };
+  return { hiddenQuestions, unavailableAnswers, forcedAnswers };
 }
 
 export type PriceOperator = "+" | "-" | "×" | "÷";
