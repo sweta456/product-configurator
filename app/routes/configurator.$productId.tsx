@@ -729,18 +729,6 @@ export default function StorefrontConfiguratorPage() {
     }
   };
 
-  useEffect(() => {
-    const { forcedAnswers } = evaluateLogicRules(logicRules, selectedAnswers);
-    for (const [questionId, value] of forcedAnswers) {
-      if (selectedAnswers[questionId] === value) continue;
-      const q = questions.find((oq) => oq.id === questionId);
-      if (!q || (q.type !== "color" && q.type !== "thumbnail")) continue;
-      const swatch = (q as any).swatches?.find((s: any) => s.value === value);
-      handleColorSwatchClick(q as ColorQuestion | ThumbnailQuestion, value, swatch?.imageUrl);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [logicRules, selectedAnswers, questions]);
-
   const handleAddToCart = () => {
     const properties: Record<string, string> = {};
 
