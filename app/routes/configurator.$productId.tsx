@@ -83,7 +83,6 @@ export async function loader({ request, params }: any) {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function isVisible(q: Question, selectedAnswers: Record<string, string>, hiddenQuestions?: Set<string>): boolean {
-  if ((q as any).hidden) return false;
   if (hiddenQuestions?.has(q.id)) return false;
   if (!q.conditions?.length) return true;
   return q.conditions.every((c) => selectedAnswers[c.questionId] === c.value);
