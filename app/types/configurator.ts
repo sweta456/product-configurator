@@ -161,6 +161,7 @@ export interface ColorQuestion {
   linkedLayerId?: string;
   swatches: ColorSwatch[];
   conditions?: Condition[];
+  hidden?: boolean;
 }
 
 export interface ThumbnailQuestion {
@@ -175,6 +176,7 @@ export interface ThumbnailQuestion {
   largeThumbnail?: boolean;
   showNameLabel?: boolean;
   applyOn?: string[];
+  hidden?: boolean;
 }
 
 export interface TextQuestion {

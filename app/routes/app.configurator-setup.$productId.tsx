@@ -1030,56 +1030,64 @@ function ThumbnailEditor({ q, layers, questions, numViews, onChange, onEditAnswe
 
         {/* Apply on — visible only for color display type */}
         {displayType === "color" && (
-          <div style={{ marginTop: 12 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
-              <span style={{ fontSize: 13, color: "#9ca3af" }}>↳</span>
-              <span style={{ fontSize: 12, color: "#6b7280", fontWeight: 500 }}>Apply on</span>
-              <div ref={applyPickerRef} style={{ marginLeft: "auto", position: "relative" }}>
-                <button onClick={() => { setShowApplyPicker((v) => !v); setApplySearchColor(""); }}
-                  style={{ display: "flex", alignItems: "center", gap: 5, padding: "4px 10px", border: "1px solid #e5e7eb", borderRadius: 6, cursor: "pointer", fontSize: 12, background: showApplyPicker ? "#eff6ff" : "#f9fafb", color: "#374151" }}>
-                  <span>🏔</span><span>Image question</span><span style={{ fontWeight: 700 }}>+</span>
-                </button>
-                {showApplyPicker && (
-                  <div style={{ position: "absolute", right: 0, top: "calc(100% + 4px)", zIndex: 50, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 8, boxShadow: "0 4px 16px rgba(0,0,0,0.12)", minWidth: 200, padding: "8px 8px 6px" }}>
-                    <input
-                      autoFocus
-                      value={applySearchColor}
-                      onChange={(e) => setApplySearchColor(e.target.value)}
-                      placeholder="Search..."
-                      style={{ width: "100%", padding: "5px 8px", fontSize: 12, border: "1px solid #e5e7eb", borderRadius: 5, marginBottom: 6, boxSizing: "border-box", outline: "none" }}
-                    />
-                    <div style={{ maxHeight: 180, overflowY: "auto" }}>
-                      {allImageItems
-                        .filter((item) => !linkedIds.includes(item.id) && item.name.toLowerCase().includes(applySearchColor.toLowerCase()))
-                        .map((item) => (
-                          <button key={item.id} onClick={() => { onChange({ ...q, applyOn: [...linkedIds, item.id] }); setShowApplyPicker(false); setApplySearchColor(""); }}
-                            style={{ display: "block", width: "100%", textAlign: "left", padding: "7px 10px", border: "none", borderRadius: 5, background: "none", cursor: "pointer", fontSize: 13, color: "#374151" }}>
-                            {item.name}
-                          </button>
-                        ))}
-                      {allImageItems.filter((item) => !linkedIds.includes(item.id) && item.name.toLowerCase().includes(applySearchColor.toLowerCase())).length === 0 && (
-                        <p style={{ padding: "6px 10px", fontSize: 12, color: "#9ca3af", margin: 0 }}>No matches.</p>
-                      )}
+          <>
+            <div style={{ marginTop: 12 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+                <span style={{ fontSize: 13, color: "#9ca3af" }}>↳</span>
+                <span style={{ fontSize: 12, color: "#6b7280", fontWeight: 500 }}>Apply on</span>
+                <div ref={applyPickerRef} style={{ marginLeft: "auto", position: "relative" }}>
+                  <button onClick={() => { setShowApplyPicker((v) => !v); setApplySearchColor(""); }}
+                    style={{ display: "flex", alignItems: "center", gap: 5, padding: "4px 10px", border: "1px solid #e5e7eb", borderRadius: 6, cursor: "pointer", fontSize: 12, background: showApplyPicker ? "#eff6ff" : "#f9fafb", color: "#374151" }}>
+                    <span>🏔</span><span>Image question</span><span style={{ fontWeight: 700 }}>+</span>
+                  </button>
+                  {showApplyPicker && (
+                    <div style={{ position: "absolute", right: 0, top: "calc(100% + 4px)", zIndex: 50, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 8, boxShadow: "0 4px 16px rgba(0,0,0,0.12)", minWidth: 200, padding: "8px 8px 6px" }}>
+                      <input
+                        autoFocus
+                        value={applySearchColor}
+                        onChange={(e) => setApplySearchColor(e.target.value)}
+                        placeholder="Search..."
+                        style={{ width: "100%", padding: "5px 8px", fontSize: 12, border: "1px solid #e5e7eb", borderRadius: 5, marginBottom: 6, boxSizing: "border-box", outline: "none" }}
+                      />
+                      <div style={{ maxHeight: 180, overflowY: "auto" }}>
+                        {allImageItems
+                          .filter((item) => !linkedIds.includes(item.id) && item.name.toLowerCase().includes(applySearchColor.toLowerCase()))
+                          .map((item) => (
+                            <button key={item.id} onClick={() => { onChange({ ...q, applyOn: [...linkedIds, item.id] }); setShowApplyPicker(false); setApplySearchColor(""); }}
+                              style={{ display: "block", width: "100%", textAlign: "left", padding: "7px 10px", border: "none", borderRadius: 5, background: "none", cursor: "pointer", fontSize: 13, color: "#374151" }}>
+                              {item.name}
+                            </button>
+                          ))}
+                        {allImageItems.filter((item) => !linkedIds.includes(item.id) && item.name.toLowerCase().includes(applySearchColor.toLowerCase())).length === 0 && (
+                          <p style={{ padding: "6px 10px", fontSize: 12, color: "#9ca3af", margin: 0 }}>No matches.</p>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                )}
-              </div>
-            </div>
-            {linkedIds.map((lid) => {
-              const linkedQ = questions.find((oq) => oq.id === lid);
-              const linkedL = !linkedQ ? layers.find((l) => l.id === lid) : null;
-              const linkedName = (linkedQ || linkedL)?.name;
-              if (!linkedName) return null;
-              return (
-                <div key={lid} style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 10px", background: "#f9fafb", borderRadius: 6, border: "1px solid #e5e7eb", marginBottom: 4 }}>
-                  <span style={{ fontSize: 13 }}>🏔</span>
-                  <span style={{ flex: 1, fontSize: 12, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{linkedName}</span>
-                  <button onClick={() => onChange({ ...q, applyOn: linkedIds.filter((id) => id !== lid) })}
-                    style={{ background: "none", border: "none", color: "#9ca3af", cursor: "pointer", fontSize: 16, padding: 0, lineHeight: 1, flexShrink: 0 }}>×</button>
+                  )}
                 </div>
-              );
-            })}
-          </div>
+              </div>
+              {linkedIds.map((lid) => {
+                const linkedQ = questions.find((oq) => oq.id === lid);
+                const linkedL = !linkedQ ? layers.find((l) => l.id === lid) : null;
+                const linkedName = (linkedQ || linkedL)?.name;
+                if (!linkedName) return null;
+                return (
+                  <div key={lid} style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 10px", background: "#f9fafb", borderRadius: 6, border: "1px solid #e5e7eb", marginBottom: 4 }}>
+                    <span style={{ fontSize: 13 }}>🏔</span>
+                    <span style={{ flex: 1, fontSize: 12, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{linkedName}</span>
+                    <button onClick={() => onChange({ ...q, applyOn: linkedIds.filter((id) => id !== lid) })}
+                      style={{ background: "none", border: "none", color: "#9ca3af", cursor: "pointer", fontSize: 16, padding: 0, lineHeight: 1, flexShrink: 0 }}>×</button>
+                  </div>
+                );
+              })}
+            </div>
+            <div style={{ marginTop: 10, paddingTop: 10, borderTop: "1px solid #f3f4f6" }}>
+              <ToggleRow label="Behind the scene" checked={q.hidden ?? false} onChange={(v) => onChange({ ...q, hidden: v })} />
+              <p style={{ margin: "2px 0 0", fontSize: 11, color: "#9ca3af" }}>
+                Hide this question from customers. Drive its color with a Logic rule instead.
+              </p>
+            </div>
+          </>
         )}
       </div>
     </div>
@@ -3963,6 +3971,7 @@ export default function BuilderPage() {
         displayType: "color",
         swatches: [],
         applyOn: [sourceId],
+        hidden: true,
       };
       setQuestions((p) => [...p, newQ]);
       setSelected({ kind: "question", id });
@@ -4236,6 +4245,7 @@ export default function BuilderPage() {
               );
               return questions.map((q, idx) => {
                 if (childIdsInGroups.has(q.id)) return null;
+                if ((q as any).hidden) return null;
                 if (q.type === "group") {
                   const gq = q as GroupQuestion;
                   const isExpanded = expandedGroups.has(q.id);
@@ -4254,6 +4264,7 @@ export default function BuilderPage() {
                       {isExpanded && gq.childIds.map((childId) => {
                         const child = questions.find((oq) => oq.id === childId);
                         if (!child) return null;
+                        if ((child as any).hidden) return null;
                         return (
                           <div key={childId} style={{ paddingLeft: 18, borderLeft: "2px solid #e5e7eb", marginLeft: 18 }}>
                             <QuestionRow
