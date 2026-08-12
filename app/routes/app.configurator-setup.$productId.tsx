@@ -1,5 +1,6 @@
 import { useLoaderData, useSubmit, useActionData, Link, useFetcher, useNavigate, useNavigation } from "react-router";
 import { useState, useEffect, useMemo, useRef } from "react";
+import { createPortal } from "react-dom";
 import { Stage, Layer as KonvaLayer, Text as KonvaText, Rect, Transformer, Group } from "../utils/react-konva.client";
 import ProductLayer from "../components/ProductLayer";
 import { ModernColorPicker } from "../components/ModernColorPicker";
@@ -449,6 +450,36 @@ function LayerRow({ layer, selected, linkedNames, onSelect, onRemove, onMoveToQu
   const dtBg = dt ? (LAYER_DISPLAY_COLORS[dt] ?? "#6b7280") : "#d1d5db";
   const [menuOpen, setMenuOpen] = useState(false);
   const [duplicateOpen, setDuplicateOpen] = useState(false);
+  const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
+  const menuBtnRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  const openMenu = () => {
+    const rect = menuBtnRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    const menuWidth = 220;
+    // Open to the side of the row: prefer the right, flip to the left if there
+    // isn't room — this keeps the menu out of the scrolling list's clipped
+    // overflow area instead of getting cut off opening downward within it.
+    const left = rect.right + 6 + menuWidth <= window.innerWidth
+      ? rect.right + 6
+      : Math.max(6, rect.left - menuWidth - 6);
+    setMenuPos({ top: rect.top, left });
+    setMenuOpen(true);
+  };
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (menuBtnRef.current?.contains(target)) return;
+      if (menuRef.current?.contains(target)) return;
+      setMenuOpen(false);
+      setDuplicateOpen(false);
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [menuOpen]);
 
   return (
     <div
@@ -458,7 +489,6 @@ function LayerRow({ layer, selected, linkedNames, onSelect, onRemove, onMoveToQu
       onDrop={onDrop}
       onDragEnd={onDragEnd}
       style={{ position: "relative", opacity: isDragging ? 0.35 : 1 }}
-      onMouseLeave={() => { setMenuOpen(false); setDuplicateOpen(false); }}
     >
       <div
         onClick={onSelect}
@@ -476,14 +506,15 @@ function LayerRow({ layer, selected, linkedNames, onSelect, onRemove, onMoveToQu
           </span>
         )}
         <button
-          onClick={(e) => { e.stopPropagation(); setMenuOpen((o) => !o); setDuplicateOpen(false); }}
+          ref={menuBtnRef}
+          onClick={(e) => { e.stopPropagation(); if (menuOpen) { setMenuOpen(false); setDuplicateOpen(false); } else { openMenu(); } }}
           style={{ background: "none", border: "none", color: "#9ca3af", cursor: "pointer", fontSize: 14, lineHeight: 1, padding: "2px 4px", flexShrink: 0, borderRadius: 4 }}
         >
           ⋮
         </button>
       </div>
-      {menuOpen && (
-        <div style={{ position: "absolute", right: 8, top: "100%", zIndex: 50, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 8, boxShadow: "0 4px 16px rgba(0,0,0,0.12)", minWidth: 200, overflow: "hidden" }}>
+      {menuOpen && menuPos && createPortal(
+        <div ref={menuRef} style={{ position: "fixed", top: menuPos.top, left: menuPos.left, zIndex: 1000, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 8, boxShadow: "0 4px 16px rgba(0,0,0,0.12)", minWidth: 220, overflow: "hidden" }}>
           {onMoveToQuestions && (
             <button onClick={(e) => { e.stopPropagation(); onMoveToQuestions(); setMenuOpen(false); }}
               style={{ display: "block", width: "100%", textAlign: "left", padding: "9px 14px", border: "none", background: "none", cursor: "pointer", fontSize: 13, color: "#374151" }}>
@@ -517,7 +548,8 @@ function LayerRow({ layer, selected, linkedNames, onSelect, onRemove, onMoveToQu
             style={{ display: "block", width: "100%", textAlign: "left", padding: "9px 14px", border: "none", background: "none", cursor: "pointer", fontSize: 13, color: "#ef4444", borderTop: "1px solid #f3f4f6" }}>
             Delete
           </button>
-        </div>
+        </div>,
+        document.body
       )}
       {linkedNames && linkedNames.length > 0 && (
         <div style={{ paddingLeft: 36, paddingBottom: 4 }}>
