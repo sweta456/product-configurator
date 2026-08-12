@@ -1,5 +1,5 @@
 import { useLoaderData, useSubmit, useActionData, Link, useFetcher, useNavigate, useNavigation } from "react-router";
-import { useState, useEffect, useMemo, useRef } from "react";
+import { useState, useEffect, useLayoutEffect, useMemo, useRef } from "react";
 import { createPortal } from "react-dom";
 import { Stage, Layer as KonvaLayer, Text as KonvaText, Rect, Transformer, Group } from "../utils/react-konva.client";
 import ProductLayer from "../components/ProductLayer";
@@ -457,14 +457,10 @@ function LayerRow({ layer, selected, linkedItems, onSelect, onSelectLinked, onRe
   const openMenu = () => {
     const rect = menuBtnRef.current?.getBoundingClientRect();
     if (!rect) return;
-    const menuWidth = 220;
-    // Open to the side of the row: prefer the right, flip to the left if there
-    // isn't room — this keeps the menu out of the scrolling list's clipped
-    // overflow area instead of getting cut off opening downward within it.
-    const left = rect.right + 6 + menuWidth <= window.innerWidth
-      ? rect.right + 6
-      : Math.max(6, rect.left - menuWidth - 6);
-    setMenuPos({ top: rect.top, left });
+    // Rough initial guess before the menu's real size is known — the layout
+    // effect below clamps it into the viewport once it's actually measured,
+    // so this only needs to be a reasonable starting point.
+    setMenuPos({ top: rect.top, left: rect.right + 6 });
     setMenuOpen(true);
   };
 
@@ -480,6 +476,26 @@ function LayerRow({ layer, selected, linkedItems, onSelect, onSelectLinked, onRe
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, [menuOpen]);
+
+  // Clamp the menu into the viewport using its real rendered size — runs again
+  // whenever the Duplicate submenu opens/closes, since that changes the menu's
+  // height after it's already been positioned once.
+  useLayoutEffect(() => {
+    if (!menuOpen || !menuPos) return;
+    const menuEl = menuRef.current;
+    const btnRect = menuBtnRef.current?.getBoundingClientRect();
+    if (!menuEl || !btnRect) return;
+    const menuRect = menuEl.getBoundingClientRect();
+    let { top, left } = menuPos;
+    left = btnRect.right + 6 + menuRect.width <= window.innerWidth
+      ? btnRect.right + 6
+      : Math.max(6, btnRect.left - menuRect.width - 6);
+    top = Math.min(top, Math.max(6, window.innerHeight - menuRect.height - 6));
+    if (top !== menuPos.top || left !== menuPos.left) {
+      setMenuPos({ top, left });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [menuOpen, duplicateOpen, menuPos]);
 
   return (
     <div
