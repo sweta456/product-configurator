@@ -331,13 +331,69 @@ function getQuestionIcon(q: Question) {
   }
 }
 
-function QuestionRow({ q, selected, layerName, onSelect, onDuplicate, onDelete, isDragging, isDragOver, onDragStart, onDragOver, onDrop, onDragEnd }: {
+// ─── Shared side-opening row menu (portal, viewport-clamped) ──────────────────
+// Used by row "⋮" menus (QuestionRow, LayerRow) so the menu never opens
+// downward into a clipped scroll container and never runs off the viewport.
+function useSideMenu(remeasureDeps: React.DependencyList = []) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  const openMenu = () => {
+    const rect = btnRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    // Rough initial guess before the menu's real size is known — the layout
+    // effect below clamps it into the viewport once it's actually measured.
+    setMenuPos({ top: rect.top, left: rect.right + 6 });
+    setMenuOpen(true);
+  };
+  const closeMenu = () => setMenuOpen(false);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (btnRef.current?.contains(target)) return;
+      if (menuRef.current?.contains(target)) return;
+      setMenuOpen(false);
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [menuOpen]);
+
+  // Clamp the menu into the viewport using its real rendered size — runs again
+  // whenever remeasureDeps change (e.g. a submenu expanding), since that
+  // changes the menu's height after it's already been positioned once.
+  useLayoutEffect(() => {
+    if (!menuOpen || !menuPos) return;
+    const menuEl = menuRef.current;
+    const btnRect = btnRef.current?.getBoundingClientRect();
+    if (!menuEl || !btnRect) return;
+    const menuRect = menuEl.getBoundingClientRect();
+    let { top, left } = menuPos;
+    left = btnRect.right + 6 + menuRect.width <= window.innerWidth
+      ? btnRect.right + 6
+      : Math.max(6, btnRect.left - menuRect.width - 6);
+    top = Math.min(top, Math.max(6, window.innerHeight - menuRect.height - 6));
+    if (top !== menuPos.top || left !== menuPos.left) {
+      setMenuPos({ top, left });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [menuOpen, menuPos, ...remeasureDeps]);
+
+  return { menuOpen, menuPos, btnRef, menuRef, openMenu, closeMenu };
+}
+
+function QuestionRow({ q, selected, layerName, onSelect, onMoveToScene, onDuplicate, onDelete, isDragging, isDragOver, onDragStart, onDragOver, onDrop, onDragEnd }: {
   q: Question; selected: boolean; layerName?: string;
-  onSelect: () => void; onDuplicate: () => void; onDelete: () => void;
+  onSelect: () => void; onMoveToScene?: () => void; onDuplicate: (mode: "import" | "copy") => void; onDelete: () => void;
   isDragging?: boolean; isDragOver?: boolean;
   onDragStart?: () => void; onDragOver?: (e: React.DragEvent) => void; onDrop?: () => void; onDragEnd?: () => void;
 }) {
-  const [menuOpen, setMenuOpen] = useState(false);
+  const [duplicateOpen, setDuplicateOpen] = useState(false);
+  const { menuOpen, menuPos, btnRef: menuBtnRef, menuRef, openMenu, closeMenu } = useSideMenu([duplicateOpen]);
+  const closeAll = () => { closeMenu(); setDuplicateOpen(false); };
   return (
     <div
       draggable
@@ -346,7 +402,6 @@ function QuestionRow({ q, selected, layerName, onSelect, onDuplicate, onDelete, 
       onDrop={onDrop}
       onDragEnd={onDragEnd}
       style={{ position: "relative", opacity: isDragging ? 0.35 : 1 }}
-      onMouseLeave={() => setMenuOpen(false)}
     >
       <div
         onClick={onSelect}
@@ -365,22 +420,47 @@ function QuestionRow({ q, selected, layerName, onSelect, onDuplicate, onDelete, 
           <span style={{ fontSize: 10, color: "#9ca3af", flexShrink: 0 }}>→ {layerName}</span>
         )}
         <button
-          onClick={(e) => { e.stopPropagation(); setMenuOpen((o) => !o); }}
+          ref={menuBtnRef}
+          onClick={(e) => { e.stopPropagation(); if (menuOpen) { closeAll(); } else { openMenu(); } }}
           style={{ background: "none", border: "none", color: "#9ca3af", cursor: "pointer", fontSize: 14, lineHeight: 1, padding: "2px 4px", flexShrink: 0, borderRadius: 4 }}>
           ⋮
         </button>
       </div>
-      {menuOpen && (
-        <div style={{ position: "absolute", right: 8, top: "100%", zIndex: 50, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 8, boxShadow: "0 4px 16px rgba(0,0,0,0.12)", minWidth: 160, overflow: "hidden" }}>
-          <button onClick={(e) => { e.stopPropagation(); onDuplicate(); setMenuOpen(false); }}
-            style={{ display: "block", width: "100%", textAlign: "left", padding: "9px 14px", border: "none", background: "none", cursor: "pointer", fontSize: 13, color: "#374151" }}>
-            Duplicate
-          </button>
-          <button onClick={(e) => { e.stopPropagation(); onDelete(); setMenuOpen(false); }}
-            style={{ display: "block", width: "100%", textAlign: "left", padding: "9px 14px", border: "none", background: "none", cursor: "pointer", fontSize: 13, color: "#ef4444" }}>
+      {menuOpen && menuPos && createPortal(
+        <div ref={menuRef} style={{ position: "fixed", top: menuPos.top, left: menuPos.left, zIndex: 1000, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 8, boxShadow: "0 4px 16px rgba(0,0,0,0.12)", minWidth: 220, overflow: "hidden" }}>
+          {onMoveToScene && (
+            <button onClick={(e) => { e.stopPropagation(); onMoveToScene(); closeAll(); }}
+              style={{ display: "block", width: "100%", textAlign: "left", padding: "9px 14px", border: "none", background: "none", cursor: "pointer", fontSize: 13, color: "#374151" }}>
+              Move behind the scene
+            </button>
+          )}
+          <div>
+            <button onClick={(e) => { e.stopPropagation(); setDuplicateOpen((o) => !o); }}
+              style={{ display: "flex", alignItems: "center", width: "100%", textAlign: "left", padding: "9px 14px", border: "none", background: duplicateOpen ? "#f9fafb" : "none", cursor: "pointer", fontSize: 13, color: "#374151" }}>
+              <span style={{ flex: 1 }}>Duplicate</span>
+              <span style={{ fontSize: 10, color: "#9ca3af" }}>{duplicateOpen ? "▾" : "▸"}</span>
+            </button>
+            {duplicateOpen && (
+              <div style={{ borderTop: "1px solid #f3f4f6" }}>
+                <button onClick={(e) => { e.stopPropagation(); onDuplicate("import"); closeAll(); }}
+                  style={{ display: "block", width: "100%", textAlign: "left", padding: "8px 14px 8px 24px", border: "none", background: "none", cursor: "pointer" }}>
+                  <span style={{ display: "block", fontSize: 13, color: "#374151" }}>Import answers</span>
+                  <span style={{ display: "block", fontSize: 11, color: "#9ca3af" }}>Link the answers to the original</span>
+                </button>
+                <button onClick={(e) => { e.stopPropagation(); onDuplicate("copy"); closeAll(); }}
+                  style={{ display: "block", width: "100%", textAlign: "left", padding: "8px 14px 8px 24px", border: "none", background: "none", cursor: "pointer" }}>
+                  <span style={{ display: "block", fontSize: 13, color: "#374151" }}>Copy answers</span>
+                  <span style={{ display: "block", fontSize: 11, color: "#9ca3af" }}>Separate the answers from the original</span>
+                </button>
+              </div>
+            )}
+          </div>
+          <button onClick={(e) => { e.stopPropagation(); onDelete(); closeAll(); }}
+            style={{ display: "block", width: "100%", textAlign: "left", padding: "9px 14px", border: "none", background: "none", cursor: "pointer", fontSize: 13, color: "#ef4444", borderTop: "1px solid #f3f4f6" }}>
             Delete
           </button>
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
@@ -448,54 +528,9 @@ function LayerRow({ layer, selected, linkedItems, onSelect, onSelectLinked, onRe
   const dt = layer.displayType;
   const dtMeta = dt ? DISPLAY_TYPE_META[dt] : null;
   const dtBg = dt ? (LAYER_DISPLAY_COLORS[dt] ?? "#6b7280") : "#d1d5db";
-  const [menuOpen, setMenuOpen] = useState(false);
   const [duplicateOpen, setDuplicateOpen] = useState(false);
-  const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null);
-  const menuBtnRef = useRef<HTMLButtonElement>(null);
-  const menuRef = useRef<HTMLDivElement>(null);
-
-  const openMenu = () => {
-    const rect = menuBtnRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    // Rough initial guess before the menu's real size is known — the layout
-    // effect below clamps it into the viewport once it's actually measured,
-    // so this only needs to be a reasonable starting point.
-    setMenuPos({ top: rect.top, left: rect.right + 6 });
-    setMenuOpen(true);
-  };
-
-  useEffect(() => {
-    if (!menuOpen) return;
-    const handleClickOutside = (e: MouseEvent) => {
-      const target = e.target as Node;
-      if (menuBtnRef.current?.contains(target)) return;
-      if (menuRef.current?.contains(target)) return;
-      setMenuOpen(false);
-      setDuplicateOpen(false);
-    };
-    document.addEventListener("mousedown", handleClickOutside);
-    return () => document.removeEventListener("mousedown", handleClickOutside);
-  }, [menuOpen]);
-
-  // Clamp the menu into the viewport using its real rendered size — runs again
-  // whenever the Duplicate submenu opens/closes, since that changes the menu's
-  // height after it's already been positioned once.
-  useLayoutEffect(() => {
-    if (!menuOpen || !menuPos) return;
-    const menuEl = menuRef.current;
-    const btnRect = menuBtnRef.current?.getBoundingClientRect();
-    if (!menuEl || !btnRect) return;
-    const menuRect = menuEl.getBoundingClientRect();
-    let { top, left } = menuPos;
-    left = btnRect.right + 6 + menuRect.width <= window.innerWidth
-      ? btnRect.right + 6
-      : Math.max(6, btnRect.left - menuRect.width - 6);
-    top = Math.min(top, Math.max(6, window.innerHeight - menuRect.height - 6));
-    if (top !== menuPos.top || left !== menuPos.left) {
-      setMenuPos({ top, left });
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [menuOpen, duplicateOpen, menuPos]);
+  const { menuOpen, menuPos, btnRef: menuBtnRef, menuRef, openMenu, closeMenu } = useSideMenu([duplicateOpen]);
+  const closeAll = () => { closeMenu(); setDuplicateOpen(false); };
 
   return (
     <div
@@ -523,7 +558,7 @@ function LayerRow({ layer, selected, linkedItems, onSelect, onSelectLinked, onRe
         )}
         <button
           ref={menuBtnRef}
-          onClick={(e) => { e.stopPropagation(); if (menuOpen) { setMenuOpen(false); setDuplicateOpen(false); } else { openMenu(); } }}
+          onClick={(e) => { e.stopPropagation(); if (menuOpen) { closeAll(); } else { openMenu(); } }}
           style={{ background: "none", border: "none", color: "#9ca3af", cursor: "pointer", fontSize: 14, lineHeight: 1, padding: "2px 4px", flexShrink: 0, borderRadius: 4 }}
         >
           ⋮
@@ -532,7 +567,7 @@ function LayerRow({ layer, selected, linkedItems, onSelect, onSelectLinked, onRe
       {menuOpen && menuPos && createPortal(
         <div ref={menuRef} style={{ position: "fixed", top: menuPos.top, left: menuPos.left, zIndex: 1000, background: "#fff", border: "1px solid #e5e7eb", borderRadius: 8, boxShadow: "0 4px 16px rgba(0,0,0,0.12)", minWidth: 220, overflow: "hidden" }}>
           {onMoveToQuestions && (
-            <button onClick={(e) => { e.stopPropagation(); onMoveToQuestions(); setMenuOpen(false); }}
+            <button onClick={(e) => { e.stopPropagation(); onMoveToQuestions(); closeAll(); }}
               style={{ display: "block", width: "100%", textAlign: "left", padding: "9px 14px", border: "none", background: "none", cursor: "pointer", fontSize: 13, color: "#374151" }}>
               Move to Question panel
             </button>
@@ -546,12 +581,12 @@ function LayerRow({ layer, selected, linkedItems, onSelect, onSelectLinked, onRe
               </button>
               {duplicateOpen && (
                 <div style={{ borderTop: "1px solid #f3f4f6" }}>
-                  <button onClick={(e) => { e.stopPropagation(); onDuplicate("import"); setMenuOpen(false); setDuplicateOpen(false); }}
+                  <button onClick={(e) => { e.stopPropagation(); onDuplicate("import"); closeAll(); }}
                     style={{ display: "block", width: "100%", textAlign: "left", padding: "8px 14px 8px 24px", border: "none", background: "none", cursor: "pointer" }}>
                     <span style={{ display: "block", fontSize: 13, color: "#374151" }}>Import answers</span>
                     <span style={{ display: "block", fontSize: 11, color: "#9ca3af" }}>Link the answers to the original</span>
                   </button>
-                  <button onClick={(e) => { e.stopPropagation(); onDuplicate("copy"); setMenuOpen(false); setDuplicateOpen(false); }}
+                  <button onClick={(e) => { e.stopPropagation(); onDuplicate("copy"); closeAll(); }}
                     style={{ display: "block", width: "100%", textAlign: "left", padding: "8px 14px 8px 24px", border: "none", background: "none", cursor: "pointer" }}>
                     <span style={{ display: "block", fontSize: 13, color: "#374151" }}>Copy answers</span>
                     <span style={{ display: "block", fontSize: 11, color: "#9ca3af" }}>Separate the answers from the original</span>
@@ -560,7 +595,7 @@ function LayerRow({ layer, selected, linkedItems, onSelect, onSelectLinked, onRe
               )}
             </div>
           )}
-          <button onClick={(e) => { e.stopPropagation(); onRemove(); setMenuOpen(false); }}
+          <button onClick={(e) => { e.stopPropagation(); onRemove(); closeAll(); }}
             style={{ display: "block", width: "100%", textAlign: "left", padding: "9px 14px", border: "none", background: "none", cursor: "pointer", fontSize: 13, color: "#ef4444", borderTop: "1px solid #f3f4f6" }}>
             Delete
           </button>
@@ -3952,11 +3987,16 @@ export default function BuilderPage() {
     );
     if (selected?.id === id) setSelected(null);
   };
-  const duplicateQ = (id: string) => {
+  const duplicateQ = (id: string, mode: "import" | "copy") => {
     const src = questions.find((q) => q.id === id);
     if (!src) return;
     const newId = `${src.type}-${Date.now()}`;
-    setQuestions((p) => [...p, { ...src, id: newId, name: `${src.name} (copy)` }]);
+    // "copy" fully separates every field (swatches/options/answers/etc.) from
+    // the original; "import" keeps the same nested arrays/objects so the
+    // duplicate starts out identical — not a live two-way sync, just a
+    // shared starting point (same caveat as the Behind the scene duplicate).
+    const base = mode === "copy" ? JSON.parse(JSON.stringify(src)) : src;
+    setQuestions((p) => [...p, { ...base, id: newId, name: `${src.name} (copy)` }]);
   };
 
   const addQuestion = (type: InputType, displayType: string) => {
@@ -4134,6 +4174,27 @@ export default function BuilderPage() {
     setLayers((p) => p.filter((l) => l.id !== id));
     setQuestions((p) => [...p, newQ]);
     setSelected({ kind: "question", id });
+  };
+
+  // Reverse of convertLayerToQuestion's "thumbnail" case — only thumbnail
+  // questions have a natural Behind the scene layer representation (swatches
+  // <-> answers), so this is the only type the "Move behind the scene" menu
+  // item is offered for.
+  const convertQuestionToLayer = (q: Question) => {
+    if (q.type !== "thumbnail") return;
+    const tq = q as ThumbnailQuestion;
+    const newLayer: LayerConfig = {
+      id: tq.id,
+      name: tq.name,
+      type: "static",
+      src: "",
+      displayType: tq.displayType ?? "image",
+      answers: (tq.swatches ?? []).map((s) => ({ id: s.value, label: s.label, thumbnailUrl: s.imageUrl, viewImages: s.viewImages, description: s.description, productionCode: s.productionCode })),
+      applyOn: tq.applyOn,
+    };
+    setQuestions((p) => p.filter((oq) => oq.id !== tq.id));
+    setLayers((p) => [...p, newLayer]);
+    setSelected({ kind: "layer", id: tq.id });
   };
 
   const createAndLinkQuestion = (inputType: InputType, layerId: string) => {
@@ -4396,7 +4457,8 @@ export default function BuilderPage() {
                               q={child} selected={selected?.id === child.id}
                               layerName={(child.type === "color" || child.type === "thumbnail") ? layers.find((l) => l.id === (child as any).linkedLayerId)?.name : undefined}
                               onSelect={() => setSelected({ kind: "question", id: child.id })}
-                              onDuplicate={() => duplicateQ(child.id)} onDelete={() => removeQ(child.id)}
+                              onMoveToScene={child.type === "thumbnail" ? () => convertQuestionToLayer(child) : undefined}
+                              onDuplicate={(mode) => duplicateQ(child.id, mode)} onDelete={() => removeQ(child.id)}
                               isDragging={dragQId === child.id} isDragOver={dragOverQId === child.id && dragQId !== child.id}
                               onDragStart={() => handleQDragStart(child.id)} onDragOver={(e) => handleQDragOver(e, child.id)}
                               onDrop={() => handleQDrop(child.id)} onDragEnd={handleQDragEnd}
@@ -4413,7 +4475,8 @@ export default function BuilderPage() {
                       q={q} selected={selected?.id === q.id}
                       layerName={(q.type === "color" || q.type === "thumbnail") ? layers.find((l) => l.id === (q as any).linkedLayerId)?.name : undefined}
                       onSelect={() => { setSelected({ kind: "question", id: q.id }); setEditingPrintAreaId(null); }}
-                      onDuplicate={() => duplicateQ(q.id)} onDelete={() => removeQ(q.id)}
+                      onMoveToScene={q.type === "thumbnail" ? () => convertQuestionToLayer(q) : undefined}
+                      onDuplicate={(mode) => duplicateQ(q.id, mode)} onDelete={() => removeQ(q.id)}
                       isDragging={dragQId === q.id} isDragOver={dragOverQId === q.id && dragQId !== q.id}
                       onDragStart={() => handleQDragStart(q.id)} onDragOver={(e) => handleQDragOver(e, q.id)}
                       onDrop={() => handleQDrop(q.id)} onDragEnd={handleQDragEnd}
