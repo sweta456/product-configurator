@@ -4427,10 +4427,11 @@ export default function BuilderPage() {
             {layers.filter((l) => l.type !== "glb-part").map((l, idx) => {
               const forwardQs = (l.applyOn ?? []).map((qid) => questions.find((q) => q.id === qid)).filter((q): q is Question => !!q);
               const reverseQs = questions.filter((q) => (q as any).applyOn?.includes(l.id));
+              // Layer<->layer links only show once, under whichever layer actually
+              // has "Apply on" set (the source) — not mirrored onto the target too.
               const forwardLayers = (l.applyOn ?? []).map((lid) => layers.find((ol) => ol.id === lid && ol.id !== l.id)).filter((ol): ol is LayerConfig => !!ol);
-              const reverseLayers = layers.filter((ol) => ol.id !== l.id && (ol.applyOn ?? []).includes(l.id));
               const linkedMap = new Map<string, string>();
-              for (const item of [...forwardQs, ...reverseQs, ...forwardLayers, ...reverseLayers]) linkedMap.set(item.id, item.name);
+              for (const item of [...forwardQs, ...reverseQs, ...forwardLayers]) linkedMap.set(item.id, item.name);
               const linkedItems = Array.from(linkedMap, ([id, name]) => ({ id, name }));
               return (
                 <LayerRow key={l.id} layer={l}
