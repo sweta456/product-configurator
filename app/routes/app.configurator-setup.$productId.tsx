@@ -436,10 +436,10 @@ function GroupRow({ q, selected, expanded, onToggle, onSelect, onDelete, onAddCh
 
 // ─── Left panel – Layer row ───────────────────────────────────────────────────
 
-function LayerRow({ layer, selected, linkedNames, onSelect, onRemove, isDragging, isDragOver, onDragStart, onDragOver, onDrop, onDragEnd }: {
+function LayerRow({ layer, selected, linkedItems, onSelect, onSelectLinked, onRemove, isDragging, isDragOver, onDragStart, onDragOver, onDrop, onDragEnd }: {
   layer: LayerConfig; selected: boolean;
-  linkedNames?: string[];
-  onSelect: () => void; onRemove: () => void;
+  linkedItems?: { id: string; name: string }[];
+  onSelect: () => void; onSelectLinked?: (id: string) => void; onRemove: () => void;
   isDragging?: boolean; isDragOver?: boolean;
   onDragStart?: () => void; onDragOver?: (e: React.DragEvent) => void; onDrop?: () => void; onDragEnd?: () => void;
 }) {
@@ -478,10 +478,16 @@ function LayerRow({ layer, selected, linkedNames, onSelect, onRemove, isDragging
           ×
         </button>
       </div>
-      {linkedNames && linkedNames.length > 0 && (
-        <div style={{ paddingLeft: 36, paddingBottom: 4 }}>
-          {linkedNames.map((n) => (
-            <span key={n} style={{ fontSize: 11, color: "#9ca3af" }}>↳ {n}</span>
+      {linkedItems && linkedItems.length > 0 && (
+        <div style={{ paddingLeft: 36, paddingBottom: 4, display: "flex", flexDirection: "column", gap: 2 }}>
+          {linkedItems.map((item) => (
+            <span
+              key={item.id}
+              onClick={(e) => { e.stopPropagation(); onSelectLinked?.(item.id); }}
+              style={{ fontSize: 11, color: "#9ca3af", cursor: onSelectLinked ? "pointer" : "default" }}
+            >
+              ↳ {item.name}
+            </span>
           ))}
         </div>
       )}
@@ -4316,14 +4322,17 @@ export default function BuilderPage() {
             </div>
             <div style={{ flex: 1, overflowY: "auto", minHeight: 0 }}>
             {layers.filter((l) => l.type !== "glb-part").map((l, idx) => {
-              const forwardNames = (l.applyOn ?? []).map((qid) => questions.find((q) => q.id === qid)?.name).filter(Boolean) as string[];
-              const reverseNames = questions.filter((q) => (q as any).applyOn?.includes(l.id)).map((q) => q.name);
-              const allLinkedNames = [...new Set([...forwardNames, ...reverseNames])];
+              const forwardQs = (l.applyOn ?? []).map((qid) => questions.find((q) => q.id === qid)).filter((q): q is Question => !!q);
+              const reverseQs = questions.filter((q) => (q as any).applyOn?.includes(l.id));
+              const linkedMap = new Map<string, string>();
+              for (const q of [...forwardQs, ...reverseQs]) linkedMap.set(q.id, q.name);
+              const linkedItems = Array.from(linkedMap, ([id, name]) => ({ id, name }));
               return (
                 <LayerRow key={l.id} layer={l}
                   selected={selected?.id === l.id}
-                  linkedNames={allLinkedNames}
+                  linkedItems={linkedItems}
                   onSelect={() => setSelected({ kind: "layer", id: l.id })}
+                  onSelectLinked={(id) => setSelected({ kind: "question", id })}
                   onRemove={() => removeL(l.id)}
                   isDragging={dragLId === l.id} isDragOver={dragOverLId === l.id && dragLId !== l.id}
                   onDragStart={() => handleLDragStart(l.id)}
