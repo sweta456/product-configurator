@@ -15,6 +15,7 @@ import {
   type ColorSwatch,
   type InputType,
   type ThumbnailQuestion,
+  type ColorQuestion,
   type TextQuestion,
   type DropdownQuestion,
   type DropdownOption,
@@ -4180,21 +4181,68 @@ export default function BuilderPage() {
   // questions have a natural Behind the scene layer representation (swatches
   // <-> answers), so this is the only type the "Move behind the scene" menu
   // item is offered for.
+  // Reverse of convertLayerToQuestion — moves any non-group question into
+  // Behind the scene as a layer. Where the question type has a natural
+  // answers-style list (thumbnail/color/dropdown/radio/label), that list
+  // carries over as the layer's answers; other types (text/file/checkbox)
+  // don't have an equivalent, so only the container (id/name) carries over,
+  // same as convertLayerToQuestion already does for those types in reverse.
   const convertQuestionToLayer = (q: Question) => {
-    if (q.type !== "thumbnail") return;
-    const tq = q as ThumbnailQuestion;
-    const newLayer: LayerConfig = {
-      id: tq.id,
-      name: tq.name,
-      type: "static",
-      src: "",
-      displayType: tq.displayType ?? "image",
-      answers: (tq.swatches ?? []).map((s) => ({ id: s.value, label: s.label, thumbnailUrl: s.imageUrl, viewImages: s.viewImages, description: s.description, productionCode: s.productionCode })),
-      applyOn: tq.applyOn,
-    };
-    setQuestions((p) => p.filter((oq) => oq.id !== tq.id));
+    const { id, name } = q;
+    let newLayer: LayerConfig;
+    switch (q.type) {
+      case "thumbnail": {
+        const tq = q as ThumbnailQuestion;
+        newLayer = {
+          id, name, type: "static", src: "",
+          displayType: tq.displayType ?? "image",
+          answers: (tq.swatches ?? []).map((s) => ({ id: s.value, label: s.label, thumbnailUrl: s.imageUrl, viewImages: s.viewImages, description: s.description, productionCode: s.productionCode })),
+          applyOn: tq.applyOn,
+        };
+        break;
+      }
+      case "color": {
+        const cq = q as ColorQuestion;
+        newLayer = {
+          id, name, type: "static", src: "",
+          displayType: cq.displayType ?? "color",
+          answers: (cq.swatches ?? []).map((s) => ({ id: s.value, label: s.label, value: s.value, description: s.description, productionCode: s.productionCode })),
+          applyOn: cq.linkedLayerId ? [cq.linkedLayerId] : undefined,
+        };
+        break;
+      }
+      case "dropdown": {
+        const dq = q as DropdownQuestion;
+        newLayer = {
+          id, name, type: "static", src: "",
+          displayType: dq.displayType ?? "none",
+          answers: (dq.options ?? []).map((o) => ({ id: o.value, label: o.label, imageUrl: o.imageUrl, viewImages: o.viewImages, thumbnailUrl: o.thumbnailUrl, description: o.description, productionCode: o.productionCode })),
+        };
+        break;
+      }
+      case "radio": {
+        const rq = q as RadioQuestion;
+        newLayer = { id, name, type: "static", src: "", answers: (rq.options ?? []).map((o) => ({ id: o.value, label: o.label })) };
+        break;
+      }
+      case "label": {
+        const lq = q as LabelQuestion;
+        newLayer = {
+          id, name, type: "static", src: "",
+          displayType: lq.displayType,
+          answers: (lq.answers ?? []).map((a) => ({ id: a.value, label: a.label, imageUrl: a.imageUrl, viewImages: a.viewImages, description: a.description, productionCode: a.productionCode })),
+        };
+        break;
+      }
+      case "group":
+        return; // grouping is a Questions-list-only concept, no Behind the scene equivalent
+      default:
+        newLayer = { id, name, type: "static", src: "" };
+        break;
+    }
+    setQuestions((p) => p.filter((oq) => oq.id !== id));
     setLayers((p) => [...p, newLayer]);
-    setSelected({ kind: "layer", id: tq.id });
+    setSelected({ kind: "layer", id });
   };
 
   const createAndLinkQuestion = (inputType: InputType, layerId: string) => {
@@ -4457,7 +4505,7 @@ export default function BuilderPage() {
                               q={child} selected={selected?.id === child.id}
                               layerName={(child.type === "color" || child.type === "thumbnail") ? layers.find((l) => l.id === (child as any).linkedLayerId)?.name : undefined}
                               onSelect={() => setSelected({ kind: "question", id: child.id })}
-                              onMoveToScene={child.type === "thumbnail" ? () => convertQuestionToLayer(child) : undefined}
+                              onMoveToScene={child.type !== "group" ? () => convertQuestionToLayer(child) : undefined}
                               onDuplicate={(mode) => duplicateQ(child.id, mode)} onDelete={() => removeQ(child.id)}
                               isDragging={dragQId === child.id} isDragOver={dragOverQId === child.id && dragQId !== child.id}
                               onDragStart={() => handleQDragStart(child.id)} onDragOver={(e) => handleQDragOver(e, child.id)}
@@ -4475,7 +4523,7 @@ export default function BuilderPage() {
                       q={q} selected={selected?.id === q.id}
                       layerName={(q.type === "color" || q.type === "thumbnail") ? layers.find((l) => l.id === (q as any).linkedLayerId)?.name : undefined}
                       onSelect={() => { setSelected({ kind: "question", id: q.id }); setEditingPrintAreaId(null); }}
-                      onMoveToScene={q.type === "thumbnail" ? () => convertQuestionToLayer(q) : undefined}
+                      onMoveToScene={() => convertQuestionToLayer(q)}
                       onDuplicate={(mode) => duplicateQ(q.id, mode)} onDelete={() => removeQ(q.id)}
                       isDragging={dragQId === q.id} isDragOver={dragOverQId === q.id && dragQId !== q.id}
                       onDragStart={() => handleQDragStart(q.id)} onDragOver={(e) => handleQDragOver(e, q.id)}
