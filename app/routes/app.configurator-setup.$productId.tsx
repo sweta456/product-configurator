@@ -2751,7 +2751,7 @@ function NewLayerEditor({ layer, layers, questions, numViews, onChange, onConver
   const iconBg = LAYER_DISPLAY_COLORS[dt] ?? "#6b7280";
   const appliedIds = layer.applyOn ?? [];
 
-  // Apply on targets questions (not layers)
+  // Apply on targets both questions and other Behind the Scene layers/parts
   const applyTargetInputType: InputType | null = applyConf
     ? (applyConf.targetDT === "image" ? "thumbnail" : applyConf.targetDT === "text" ? "text" : null)
     : null;
@@ -2764,6 +2764,12 @@ function NewLayerEditor({ layer, layers, questions, numViews, onChange, onConver
     : [];
   const filteredApplyQuestions = matchingQuestions.filter(
     (q) => !appliedIds.includes(q.id) && q.name.toLowerCase().includes(applySearch.toLowerCase())
+  );
+  const matchingLayers = applyConf
+    ? layers.filter((l) => l.type !== "glb-part" && l.id !== layer.id)
+    : [];
+  const filteredApplyLayers = matchingLayers.filter(
+    (l) => !appliedIds.includes(l.id) && l.name.toLowerCase().includes(applySearch.toLowerCase())
   );
 
   const addAnswer = () => {
@@ -2912,18 +2918,21 @@ function NewLayerEditor({ layer, layers, questions, numViews, onChange, onConver
                 )}
 
                 {/* Select existing */}
-                {matchingQuestions.length > 0 && (
+                {(matchingQuestions.length > 0 || matchingLayers.length > 0) && (
                   <>
                     <div style={{ fontSize: 11, color: "#9ca3af", textAlign: "center", margin: "8px 0", borderTop: "1px solid #e5e7eb", paddingTop: 8 }}>or select existing</div>
                     <input
                       value={applySearch}
                       onChange={(e) => setApplySearch(e.target.value)}
-                      placeholder="Search questions..."
+                      placeholder="Search..."
                       style={{ ...inputSt, marginBottom: 6, fontSize: 12 }}
                     />
-                    <div style={{ maxHeight: 140, overflowY: "auto" }}>
-                      {filteredApplyQuestions.length === 0 && (
-                        <p style={{ fontSize: 12, color: "#9ca3af", margin: "4px 0", textAlign: "center" }}>No matching questions</p>
+                    <div style={{ maxHeight: 200, overflowY: "auto" }}>
+                      {filteredApplyQuestions.length === 0 && filteredApplyLayers.length === 0 && (
+                        <p style={{ fontSize: 12, color: "#9ca3af", margin: "4px 0", textAlign: "center" }}>No matches</p>
+                      )}
+                      {filteredApplyQuestions.length > 0 && (
+                        <div style={{ fontSize: 10, fontWeight: 700, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.05em", padding: "4px 8px" }}>Questions</div>
                       )}
                       {filteredApplyQuestions.map((q) => (
                         <button key={q.id}
@@ -2935,23 +2944,43 @@ function NewLayerEditor({ layer, layers, questions, numViews, onChange, onConver
                           <span style={{ flex: 1, textAlign: "left", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{q.name}</span>
                         </button>
                       ))}
+                      {filteredApplyLayers.length > 0 && (
+                        <div style={{ fontSize: 10, fontWeight: 700, color: "#9ca3af", textTransform: "uppercase", letterSpacing: "0.05em", padding: "4px 8px" }}>Behind the Scene</div>
+                      )}
+                      {filteredApplyLayers.map((l) => (
+                        <button key={l.id}
+                          onClick={() => { onChange({ ...layer, applyOn: [...appliedIds, l.id] }); setShowApplyPicker(false); }}
+                          style={{ display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "6px 8px", border: "none", background: "none", cursor: "pointer", fontSize: 13, color: "#374151", borderRadius: 5 }}>
+                          <span style={{ width: 20, height: 20, background: l.displayType ? (LAYER_DISPLAY_COLORS[l.displayType] ?? "#6b7280") : "#d1d5db", borderRadius: 3, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, color: "#fff", flexShrink: 0 }}>
+                            {l.displayType ? (DISPLAY_TYPE_META[l.displayType]?.icon ?? "?") : "◆"}
+                          </span>
+                          <span style={{ flex: 1, textAlign: "left", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{l.name}</span>
+                        </button>
+                      ))}
                     </div>
                   </>
                 )}
               </div>
             )}
 
-            {/* Applied question links */}
+            {/* Applied question/layer links */}
             {appliedIds.map((qid) => {
               const linkedQ = questions.find((q) => q.id === qid);
-              if (!linkedQ) return null;
-              const qTypeMeta = INPUT_TYPE_CONFIG.find((c) => c.type === linkedQ.type);
+              const linkedL = !linkedQ ? layers.find((l) => l.id === qid) : null;
+              if (!linkedQ && !linkedL) return null;
+              const qTypeMeta = linkedQ ? INPUT_TYPE_CONFIG.find((c) => c.type === linkedQ.type) : null;
+              const badgeBg = linkedQ
+                ? (qTypeMeta?.bg ?? "#6b7280")
+                : (linkedL?.displayType ? (LAYER_DISPLAY_COLORS[linkedL.displayType] ?? "#6b7280") : "#d1d5db");
+              const badgeIcon = linkedQ
+                ? (qTypeMeta?.icon ?? "?")
+                : (linkedL?.displayType ? (DISPLAY_TYPE_META[linkedL.displayType]?.icon ?? "?") : "◆");
               return (
                 <div key={qid} style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 10px", background: "#f9fafb", borderRadius: 6, border: "1px solid #e5e7eb", marginBottom: 4, marginTop: 4 }}>
-                  <span style={{ width: 18, height: 18, background: qTypeMeta?.bg ?? "#6b7280", borderRadius: 3, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, color: "#fff", flexShrink: 0 }}>
-                    {qTypeMeta?.icon ?? "?"}
+                  <span style={{ width: 18, height: 18, background: badgeBg, borderRadius: 3, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, color: "#fff", flexShrink: 0 }}>
+                    {badgeIcon}
                   </span>
-                  <span style={{ flex: 1, fontSize: 12, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{linkedQ.name}</span>
+                  <span style={{ flex: 1, fontSize: 12, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{(linkedQ ?? linkedL)?.name}</span>
                   <button onClick={() => onChange({ ...layer, applyOn: appliedIds.filter((id) => id !== qid) })}
                     style={{ background: "none", border: "none", color: "#9ca3af", cursor: "pointer", fontSize: 16, padding: 0, lineHeight: 1, flexShrink: 0 }}>×</button>
                 </div>
