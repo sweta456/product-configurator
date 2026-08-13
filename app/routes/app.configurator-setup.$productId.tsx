@@ -4222,14 +4222,18 @@ export default function BuilderPage() {
       }
       case "radio": {
         const rq = q as RadioQuestion;
-        newLayer = { id, name, type: "static", src: "", answers: (rq.options ?? []).map((o) => ({ id: o.value, label: o.label })) };
+        newLayer = {
+          id, name, type: "static", src: "",
+          displayType: (rq as any).displayType || "none",
+          answers: (rq.options ?? []).map((o) => ({ id: o.value, label: o.label })),
+        };
         break;
       }
       case "label": {
         const lq = q as LabelQuestion;
         newLayer = {
           id, name, type: "static", src: "",
-          displayType: lq.displayType,
+          displayType: lq.displayType || "none",
           answers: (lq.answers ?? []).map((a) => ({ id: a.value, label: a.label, imageUrl: a.imageUrl, viewImages: a.viewImages, description: a.description, productionCode: a.productionCode })),
         };
         break;
@@ -4237,7 +4241,10 @@ export default function BuilderPage() {
       case "group":
         return; // grouping is a Questions-list-only concept, no Behind the scene equivalent
       default:
-        newLayer = { id, name, type: "static", src: "" };
+        // text/file/checkbox/none: no natural answers list, but still needs a
+        // non-empty displayType or LayerEditorComp falls back to the old
+        // single-image-per-view editor instead of the answers-based one.
+        newLayer = { id, name, type: "static", src: "", displayType: (q as any).displayType || "none" };
         break;
     }
     setQuestions((p) => p.filter((oq) => oq.id !== id));
