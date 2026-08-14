@@ -315,21 +315,23 @@ function AddLayerModal({ onAdd, onClose }: {
 
 function getQuestionIcon(q: Question) {
   const dt = (q as any).displayType;
-  if (q.type === "thumbnail" && dt === "image") return <span style={{ fontSize: 11, color: "#0ea5e9" }}>🏔</span>;
-  if (q.type === "thumbnail" && dt === "color") return <span style={{ fontSize: 11, color: "#f59e0b" }}>💧</span>;
-  switch (q.type) {
-    case "color":     return <span style={{ display: "inline-block", width: 12, height: 12, borderRadius: "50%", background: q.swatches?.[0]?.value ?? "#888", border: "1px solid rgba(0,0,0,0.1)", flexShrink: 0 }} />;
-    case "thumbnail": return <span style={{ fontSize: 11, color: "#0ea5e9", fontWeight: 700 }}>⊞</span>;
-    case "text":      return <span style={{ fontWeight: 800, fontSize: 12, color: "#10b981", lineHeight: 1 }}>T</span>;
-    case "file":      return <span style={{ fontSize: 11, color: "#ef4444" }}>↑</span>;
-    case "dropdown":  return <span style={{ fontSize: 10, color: "#6366f1" }}>▼</span>;
-    case "radio":     return <span style={{ fontSize: 10, color: "#6366f1" }}>◉</span>;
-    case "checkbox":  return <span style={{ fontSize: 10, color: "#10b981" }}>☑</span>;
-    case "label":     return <span style={{ fontSize: 10, color: "#22c55e" }}>⊟</span>;
-    case "group":     return <span style={{ fontSize: 11, color: "#6b7280" }}>📁</span>;
-    case "none":      return <span style={{ fontSize: 11, color: "#9ca3af" }}>⊘</span>;
-    default:          return <span style={{ fontSize: 10, color: "#9ca3af" }}>?</span>;
+  const badge = (bg: string, icon: React.ReactNode) => (
+    <span style={{ width: 18, height: 18, background: bg, borderRadius: 4, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 10, color: "#fff", fontWeight: 700, flexShrink: 0 }}>
+      {icon}
+    </span>
+  );
+  // Thumbnail questions get a badge reflecting their configured display type
+  // (image vs color), matching the Display type picker's own icon/color.
+  if (q.type === "thumbnail" && dt === "image") return badge("#0ea5e9", "🏔");
+  if (q.type === "thumbnail" && dt === "color") return badge("#f59e0b", "💧");
+  // Color questions show a live preview of their first swatch instead of a badge.
+  if (q.type === "color") {
+    return <span style={{ display: "inline-block", width: 18, height: 18, borderRadius: "50%", background: q.swatches?.[0]?.value ?? "#888", border: "1px solid rgba(0,0,0,0.15)", flexShrink: 0 }} />;
   }
+  // Everything else reuses the same bg/icon already shown in the Input type
+  // picker, so a question's row icon always matches its own dropdown badge.
+  const meta = INPUT_TYPE_CONFIG.find((c) => c.type === q.type);
+  return badge(meta?.bg ?? "#9ca3af", meta?.icon ?? "?");
 }
 
 // ─── Shared side-opening row menu (portal, viewport-clamped) ──────────────────
