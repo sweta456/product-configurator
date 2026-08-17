@@ -4538,12 +4538,14 @@ export default function BuilderPage() {
                               onDrop={() => handleQDrop(child.id)} onDragEnd={handleQDragEnd}
                             />
                             {/* Same nested Behind the Scene layer links as the top-level
-                                question rows below, just indented for a grouped child. */}
+                                question rows below, just indented for a grouped child.
+                                Styled to match LayerRow's own linkedItems label (plain
+                                "↳ name", no icon) rather than the file-question print
+                                area rows, per design feedback. */}
                             {getLinkedLayersFor(child, layers).map((ll) => (
                               <div key={ll.id} onClick={() => setSelected({ kind: "layer", id: ll.id })}
-                                style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 10px 5px 40px", cursor: "pointer", background: selected?.id === ll.id ? "#eff6ff" : "transparent" }}>
-                                <span style={{ fontSize: 11 }}>🗂</span>
-                                <span style={{ fontSize: 12, color: "#6b7280" }}>↳ {ll.name}</span>
+                                style={{ padding: "2px 10px 4px 40px", cursor: "pointer" }}>
+                                <span style={{ fontSize: 11, color: selected?.id === ll.id ? "#3b82f6" : "#9ca3af" }}>↳ {ll.name}</span>
                               </div>
                             ))}
                           </div>
@@ -4574,12 +4576,13 @@ export default function BuilderPage() {
                     {/* Behind the Scene layers this question applies its answer onto
                         (via linkedLayerId or the Apply on picker's applyOn list),
                         nested here so they're visible without scrolling down to the
-                        separate Behind the Scene section. */}
+                        separate Behind the Scene section. Styled to match LayerRow's
+                        own linkedItems label (plain "↳ name", no icon) rather than
+                        the file-question print area rows, per design feedback. */}
                     {getLinkedLayersFor(q, layers).map((ll) => (
                       <div key={ll.id} onClick={() => setSelected({ kind: "layer", id: ll.id })}
-                        style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 10px 5px 40px", cursor: "pointer", background: selected?.id === ll.id ? "#eff6ff" : "transparent" }}>
-                        <span style={{ fontSize: 11 }}>🗂</span>
-                        <span style={{ fontSize: 12, color: "#6b7280" }}>↳ {ll.name}</span>
+                        style={{ padding: "2px 10px 4px 40px", cursor: "pointer" }}>
+                        <span style={{ fontSize: 11, color: selected?.id === ll.id ? "#3b82f6" : "#9ca3af" }}>↳ {ll.name}</span>
                       </div>
                     ))}
                   </div>
