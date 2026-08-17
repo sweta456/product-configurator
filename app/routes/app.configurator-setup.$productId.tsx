@@ -961,13 +961,16 @@ function AnswerDetailPanel({ swatch, numViews, displayType, onDone, onChange }: 
 
 // ─── Thumbnail question editor ─────────────────────────────────────────────────
 
-function ThumbnailEditor({ q, layers, questions, numViews, onChange, onEditAnswer, editingIdx, onSwitchType, onPreview }: {
+function ThumbnailEditor({ q, layers, questions, numViews, onChange, onEditAnswer, editingIdx, onSwitchType, onPreview, onCreateLayer }: {
   q: ThumbnailQuestion; layers: LayerConfig[]; questions: Question[];
   numViews: number; onChange: (updated: Question) => void;
   onEditAnswer: (idx: number) => void;
   editingIdx: number | null;
   onSwitchType?: (type: InputType) => void;
   onPreview?: (value: string) => void;
+  // Creates a new Behind the Scene layer with the given displayType and
+  // returns its new id, so the Apply on picker can link to it right away.
+  onCreateLayer?: (displayType: string) => string;
 }) {
   const [answerMenu, setAnswerMenu] = useState<number | null>(null);
   const [showApplyPicker, setShowApplyPicker] = useState(false);
@@ -1161,8 +1164,8 @@ function ThumbnailEditor({ q, layers, questions, numViews, onChange, onEditAnswe
           )}
         </div>
 
-        {/* Apply on — visible only for color display type */}
-        {displayType === "color" && (
+        {/* Apply on — lets a color or image answer swap onto another question/layer */}
+        {(displayType === "color" || displayType === "image") && (
           <div style={{ marginTop: 12 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
               <span style={{ fontSize: 13, color: "#9ca3af" }}>↳</span>
@@ -1181,6 +1184,22 @@ function ThumbnailEditor({ q, layers, questions, numViews, onChange, onEditAnswe
                       placeholder="Search..."
                       style={{ width: "100%", padding: "5px 8px", fontSize: 12, border: "1px solid #e5e7eb", borderRadius: 5, marginBottom: 6, boxSizing: "border-box", outline: "none" }}
                     />
+                    {/* Lets you spin up a brand-new Behind the Scene layer without
+                        leaving this panel, instead of only picking from existing
+                        ones below. Creates the layer, then immediately links it
+                        into this question's applyOn list. */}
+                    {onCreateLayer && (
+                      <button
+                        onClick={() => {
+                          const newId = onCreateLayer(displayType); // create the layer, get its new id back
+                          onChange({ ...q, applyOn: [...linkedIds, newId] }); // link it to this question right away
+                          setShowApplyPicker(false);
+                          setApplySearchColor("");
+                        }}
+                        style={{ display: "flex", alignItems: "center", gap: 6, width: "100%", textAlign: "left", padding: "7px 10px", border: "none", borderRadius: 5, background: "none", cursor: "pointer", fontSize: 13, color: "#111827", fontWeight: 600, marginBottom: 4 }}>
+                        <span style={{ fontWeight: 700 }}>+</span> New behind the scene layer
+                      </button>
+                    )}
                     <div style={{ maxHeight: 180, overflowY: "auto" }}>
                       {allImageItems
                         .filter((item) => !linkedIds.includes(item.id) && item.name.toLowerCase().includes(applySearchColor.toLowerCase()))
@@ -4154,6 +4173,20 @@ export default function BuilderPage() {
     setSelected({ kind: "layer", id });
   };
 
+  // Creates a new Behind the Scene layer from inside a question's own "Apply
+  // on" picker, so a question can gain a new apply target without leaving
+  // the question panel to use the separate "+" in the Behind the Scene list.
+  // Unlike addLinkedLayer, the link direction here is the question's own
+  // applyOn (set by the caller), not the layer's — and selection stays on
+  // the question being edited, so keep this a "free" creator with no side effects.
+  const createApplyTargetLayer = (displayType: string): string => {
+    const baseName = DISPLAY_TYPE_META[displayType]?.label ?? displayType;
+    const id = `${displayType}-${Date.now()}`;
+    const count = layers.filter((l) => l.displayType === displayType).length + 1;
+    setLayers((p) => [...p, { id, name: `Untitled ${baseName.toLowerCase()} ${count}`, type: "static", src: "", displayType, answers: [] }]);
+    return id;
+  };
+
   const convertLayerToQuestion = (layer: LayerConfig, inputType: InputType) => {
     const { id, name } = layer;
     const answerOptions = (layer.answers ?? []).map((a) => ({ value: a.id, label: a.label }));
@@ -5134,6 +5167,7 @@ export default function BuilderPage() {
               editingIdx={answerEditState?.questionId === selQ.id ? (answerEditState?.answerIdx ?? null) : null}
               onSwitchType={(t) => switchQuestionType(selQ.id, t)}
               onPreview={(value) => setSelectedSwatches((p) => ({ ...p, [selQ.id]: value }))}
+              onCreateLayer={createApplyTargetLayer}
             />
           )}
           {/* Pure color picker questions → SwatchEditor */}
