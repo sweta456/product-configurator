@@ -11,8 +11,7 @@ import "@shopify/shopify-app-react-router/adapters/node";
 import { shopifyApp, AppDistribution, ApiVersion, LoginErrorType, boundary } from "@shopify/shopify-app-react-router/server";
 import { PrismaSessionStorage } from "@shopify/shopify-app-session-storage-prisma";
 import { PrismaClient } from "@prisma/client";
-import { useState, useEffect, forwardRef, useRef, useImperativeHandle, Suspense, Component, useMemo, useCallback } from "react";
-import { Image, Stage, Layer, Text, Transformer, Group, Rect } from "react-konva";
+import { useState, useEffect, forwardRef, useRef, useImperativeHandle, Suspense, Component, useMemo, useCallback, useLayoutEffect } from "react";
 import useImage from "use-image";
 import { Canvas } from "@react-three/fiber";
 import { OrbitControls, useGLTF, Bounds, useBounds } from "@react-three/drei";
@@ -20,6 +19,7 @@ import * as THREE from "three";
 import { clone } from "three/examples/jsm/utils/SkeletonUtils.js";
 import { AppProvider } from "@shopify/shopify-app-react-router/react";
 import { AppProvider as AppProvider$1, Page, BlockStack, Banner, Layout, Card, Text as Text$1, Divider, InlineStack, Box, Badge, Button, FormLayout, TextField, useIndexResourceState, EmptyState, IndexTable, Thumbnail, Spinner, Popover, ActionList, Select, Icon } from "@shopify/polaris";
+import { createPortal } from "react-dom";
 import { ProductIcon, MenuHorizontalIcon, PaintBrushFlatIcon, ViewIcon, StarFilledIcon, ChevronRightIcon } from "@shopify/polaris-icons";
 const prisma = global.prisma || new PrismaClient();
 if (process.env.NODE_ENV !== "production") {
@@ -147,7 +147,7 @@ const route1 = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProper
   __proto__: null,
   action: action$h
 }, Symbol.toStringTag, { value: "Module" }));
-async function loader$d({
+async function loader$e({
   request
 }) {
   const url = new URL(request.url);
@@ -172,7 +172,7 @@ async function loader$d({
 }
 const route2 = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
   __proto__: null,
-  loader: loader$d
+  loader: loader$e
 }, Symbol.toStringTag, { value: "Module" }));
 const action$g = async ({
   request
@@ -266,6 +266,13 @@ const route5 = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProper
   __proto__: null,
   action: action$e
 }, Symbol.toStringTag, { value: "Module" }));
+const Stage = void 0;
+const Layer = void 0;
+const Text = void 0;
+const Image = void 0;
+const Transformer = void 0;
+const Group = void 0;
+const Rect = void 0;
 function useColorizedLayer(src, color, textureUrl, width, height) {
   const [sourceImage] = useImage(src, "anonymous");
   const [textureImage] = useImage(textureUrl || "", "anonymous");
@@ -761,7 +768,7 @@ const headers$2 = () => ({
 });
 const CANVAS_SIZE$2 = 560;
 const COORD_SCALE$1 = CANVAS_SIZE$2 / 800;
-async function loader$c({
+async function loader$d({
   request,
   params
 }) {
@@ -1280,7 +1287,6 @@ const configurator_$productId = UNSAFE_withComponentProps(function StorefrontCon
     ...((_c = config == null ? void 0 : config.options) == null ? void 0 : _c.pricing) ?? {}
   };
   const pricingActive = pricing.basePrice > 0 || pricing.extraPrices.length > 0 || pricing.equations.length > 0;
-  const numericProductId = productId.split("/").pop();
   const [currentView, setCurrentView] = useState(0);
   const [selectedAnswers, setSelectedAnswers] = useState(() => {
     var _a2, _b2;
@@ -1311,8 +1317,6 @@ const configurator_$productId = UNSAFE_withComponentProps(function StorefrontCon
       return `${currencyCode} ${currentTotal.toFixed(2)}`;
     }
   }, [currentTotal, currencyCode]);
-  const [checkoutError, setCheckoutError] = useState(null);
-  const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [layerColors, setLayerColors] = useState({});
   const [layerImageOverrides, setLayerImageOverrides] = useState(() => {
     var _a2;
@@ -1647,7 +1651,6 @@ const configurator_$productId = UNSAFE_withComponentProps(function StorefrontCon
       }
     }
     setSelectedId(null);
-    setCheckoutError(null);
     setTimeout(async () => {
       var _a3;
       const previewDataUrl = (_a3 = stageRef.current) == null ? void 0 : _a3.toDataURL({
@@ -1673,36 +1676,6 @@ const configurator_$productId = UNSAFE_withComponentProps(function StorefrontCon
           }
         } catch {
         }
-      }
-      if (pricingActive) {
-        setCheckoutLoading(true);
-        try {
-          const customAttributes = Object.entries(properties).map(([key, value]) => ({
-            key,
-            value
-          }));
-          const resp = await fetch(`/configurator/${numericProductId}/checkout?shop=${encodeURIComponent(shop)}`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json"
-            },
-            body: JSON.stringify({
-              selectedAnswers,
-              customAttributes
-            })
-          });
-          const data = await resp.json();
-          if (data.invoiceUrl) {
-            window.top.location.href = data.invoiceUrl;
-          } else {
-            setCheckoutError(data.error || "Could not start checkout. Please try again.");
-            setCheckoutLoading(false);
-          }
-        } catch {
-          setCheckoutError("Could not start checkout. Please check your connection and try again.");
-          setCheckoutLoading(false);
-        }
-        return;
       }
       window.parent.postMessage({
         type: "configurator:add-to-cart",
@@ -2611,20 +2584,8 @@ const configurator_$productId = UNSAFE_withComponentProps(function StorefrontCon
                 },
                 children: formattedTotal
               })]
-            }), checkoutError && /* @__PURE__ */ jsx("div", {
-              style: {
-                padding: "8px 12px",
-                marginBottom: 8,
-                borderRadius: 6,
-                background: "#fef2f2",
-                border: "1px solid #fecaca",
-                color: "#991b1b",
-                fontSize: 13
-              },
-              children: checkoutError
             }), /* @__PURE__ */ jsxs("button", {
               onClick: handleAddToCart,
-              disabled: checkoutLoading,
               className: "cf-add-btn",
               style: {
                 width: "100%",
@@ -2634,9 +2595,8 @@ const configurator_$productId = UNSAFE_withComponentProps(function StorefrontCon
                 borderRadius: "var(--cf-btn-radius, var(--cf-radius))",
                 fontWeight: 700,
                 fontSize: 14,
-                cursor: checkoutLoading ? "wait" : "pointer",
+                cursor: "pointer",
                 letterSpacing: "0.02em",
-                opacity: checkoutLoading ? 0.7 : 1,
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
@@ -2966,120 +2926,9 @@ const route6 = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProper
   __proto__: null,
   default: configurator_$productId,
   headers: headers$2,
-  loader: loader$c
+  loader: loader$d
 }, Symbol.toStringTag, { value: "Module" }));
-async function action$d({
-  request,
-  params
-}) {
-  var _a, _b, _c, _d, _e, _f;
-  if (request.method !== "POST") {
-    return Response.json({
-      error: "Method not allowed"
-    }, {
-      status: 405
-    });
-  }
-  const url = new URL(request.url);
-  const shop = url.searchParams.get("shop");
-  const numericId = params.productId;
-  if (!shop || !numericId) {
-    return Response.json({
-      error: "Missing shop or product"
-    }, {
-      status: 400
-    });
-  }
-  const productId = `gid://shopify/Product/${numericId}`;
-  let body;
-  try {
-    body = await request.json();
-  } catch {
-    return Response.json({
-      error: "Invalid request body"
-    }, {
-      status: 400
-    });
-  }
-  const selectedAnswers = body.selectedAnswers ?? {};
-  const customAttributes = body.customAttributes ?? [];
-  const config = await prisma.productConfig.findFirst({
-    where: {
-      productId,
-      shop
-    }
-  });
-  if (!config) {
-    return Response.json({
-      error: "Product configuration not found"
-    }, {
-      status: 404
-    });
-  }
-  const pricing = {
-    ...DEFAULT_PRICING,
-    ...((_a = config.options) == null ? void 0 : _a.pricing) ?? {}
-  };
-  const total = computeConfiguratorPrice(pricing, selectedAnswers);
-  let admin;
-  try {
-    ({
-      admin
-    } = await unauthenticated.admin(shop));
-  } catch {
-    return Response.json({
-      error: "Unable to process checkout for this store right now. Please contact the store."
-    }, {
-      status: 502
-    });
-  }
-  const productName = config.productName ?? "Customized product";
-  const resp = await admin.graphql(`#graphql
-    mutation CreateConfiguratorDraftOrder($input: DraftOrderInput!) {
-      draftOrderCreate(input: $input) {
-        draftOrder { id invoiceUrl }
-        userErrors { field message }
-      }
-    }`, {
-    variables: {
-      input: {
-        lineItems: [{
-          title: `${productName} (Customized)`,
-          originalUnitPrice: total.toFixed(2),
-          quantity: 1,
-          taxable: pricing.displayTaxes,
-          requiresShipping: true,
-          customAttributes
-        }]
-      }
-    }
-  });
-  const data = await resp.json();
-  const userErrors = ((_c = (_b = data.data) == null ? void 0 : _b.draftOrderCreate) == null ? void 0 : _c.userErrors) ?? [];
-  if (userErrors.length > 0) {
-    return Response.json({
-      error: userErrors[0].message
-    }, {
-      status: 502
-    });
-  }
-  const invoiceUrl = (_f = (_e = (_d = data.data) == null ? void 0 : _d.draftOrderCreate) == null ? void 0 : _e.draftOrder) == null ? void 0 : _f.invoiceUrl;
-  if (!invoiceUrl) {
-    return Response.json({
-      error: "Checkout could not be created. Please try again."
-    }, {
-      status: 502
-    });
-  }
-  return Response.json({
-    invoiceUrl
-  });
-}
-const route7 = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
-  __proto__: null,
-  action: action$d
-}, Symbol.toStringTag, { value: "Module" }));
-const action$c = async ({
+const action$d = async ({
   request
 }) => {
   const {
@@ -3121,9 +2970,9 @@ const action$c = async ({
   }
   return new Response();
 };
-const route8 = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
+const route7 = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
   __proto__: null,
-  action: action$c
+  action: action$d
 }, Symbol.toStringTag, { value: "Module" }));
 async function uploadFileToShopify(admin, { buffer, filename, mimeType, resourceType }) {
   var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m;
@@ -3219,7 +3068,7 @@ async function uploadFileToShopify(admin, { buffer, filename, mimeType, resource
   }
   return { error: "Timed out waiting for the file to finish processing" };
 }
-async function action$b({
+async function action$c({
   request
 }) {
   if (request.method !== "POST") {
@@ -3296,9 +3145,9 @@ async function action$b({
     });
   }
 }
-const route9 = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
+const route8 = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
   __proto__: null,
-  action: action$b
+  action: action$c
 }, Symbol.toStringTag, { value: "Module" }));
 function loginErrorMessage(loginErrors) {
   if ((loginErrors == null ? void 0 : loginErrors.shop) === LoginErrorType.MissingShop) {
@@ -3327,7 +3176,7 @@ async function getLoginResult(request) {
     errors: loginErrorMessage(resp)
   };
 }
-const loader$b = async ({
+const loader$c = async ({
   request
 }) => {
   const url = new URL(request.url);
@@ -3342,7 +3191,7 @@ const loader$b = async ({
   }
   return getLoginResult(new Request(url.toString(), request));
 };
-const action$a = async ({
+const action$b = async ({
   request
 }) => {
   return getLoginResult(request);
@@ -3406,11 +3255,11 @@ const route$1 = UNSAFE_withComponentProps(function Auth() {
     })
   });
 });
-const route10 = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
+const route9 = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
   __proto__: null,
-  action: action$a,
+  action: action$b,
   default: route$1,
-  loader: loader$b
+  loader: loader$c
 }, Symbol.toStringTag, { value: "Module" }));
 const index = "_index_12o3y_1";
 const heading = "_heading_12o3y_11";
@@ -3432,11 +3281,11 @@ const styles = {
   button,
   list
 };
-const loader$a = async ({
+const loader$b = async ({
   request
 }) => {
   const url = new URL(request.url);
-  if (url.searchParams.get("shop")) {
+  if (url.searchParams.get("shop") || url.searchParams.get("host")) {
     throw redirect(`/app?${url.searchParams.toString()}`);
   }
   return {
@@ -3496,12 +3345,12 @@ const route = UNSAFE_withComponentProps(function App2() {
     })
   });
 });
-const route11 = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
+const route10 = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
   __proto__: null,
   default: route,
-  loader: loader$a
+  loader: loader$b
 }, Symbol.toStringTag, { value: "Module" }));
-const loader$9 = async ({
+const loader$a = async ({
   request
 }) => {
   await authenticate.admin(request);
@@ -3510,10 +3359,10 @@ const loader$9 = async ({
 const headers$1 = (headersArgs) => {
   return boundary.headers(headersArgs);
 };
-const route12 = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
+const route11 = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
   __proto__: null,
   headers: headers$1,
-  loader: loader$9
+  loader: loader$a
 }, Symbol.toStringTag, { value: "Module" }));
 const Polaris = /* @__PURE__ */ JSON.parse('{"ActionMenu":{"Actions":{"moreActions":"More actions"},"RollupActions":{"rollupButton":"View actions"}},"ActionList":{"SearchField":{"clearButtonLabel":"Clear","search":"Search","placeholder":"Search actions"}},"Avatar":{"label":"Avatar","labelWithInitials":"Avatar with initials {initials}"},"Autocomplete":{"spinnerAccessibilityLabel":"Loading","ellipsis":"{content}…"},"Badge":{"PROGRESS_LABELS":{"incomplete":"Incomplete","partiallyComplete":"Partially complete","complete":"Complete"},"TONE_LABELS":{"info":"Info","success":"Success","warning":"Warning","critical":"Critical","attention":"Attention","new":"New","readOnly":"Read-only","enabled":"Enabled"},"progressAndTone":"{toneLabel} {progressLabel}"},"Banner":{"dismissButton":"Dismiss notification"},"Button":{"spinnerAccessibilityLabel":"Loading"},"Common":{"checkbox":"checkbox","undo":"Undo","cancel":"Cancel","clear":"Clear","close":"Close","submit":"Submit","more":"More"},"ContextualSaveBar":{"save":"Save","discard":"Discard"},"DataTable":{"sortAccessibilityLabel":"sort {direction} by","navAccessibilityLabel":"Scroll table {direction} one column","totalsRowHeading":"Totals","totalRowHeading":"Total"},"DatePicker":{"previousMonth":"Show previous month, {previousMonthName} {showPreviousYear}","nextMonth":"Show next month, {nextMonth} {nextYear}","today":"Today ","start":"Start of range","end":"End of range","months":{"january":"January","february":"February","march":"March","april":"April","may":"May","june":"June","july":"July","august":"August","september":"September","october":"October","november":"November","december":"December"},"days":{"monday":"Monday","tuesday":"Tuesday","wednesday":"Wednesday","thursday":"Thursday","friday":"Friday","saturday":"Saturday","sunday":"Sunday"},"daysAbbreviated":{"monday":"Mo","tuesday":"Tu","wednesday":"We","thursday":"Th","friday":"Fr","saturday":"Sa","sunday":"Su"}},"DiscardConfirmationModal":{"title":"Discard all unsaved changes","message":"If you discard changes, you’ll delete any edits you made since you last saved.","primaryAction":"Discard changes","secondaryAction":"Continue editing"},"DropZone":{"single":{"overlayTextFile":"Drop file to upload","overlayTextImage":"Drop image to upload","overlayTextVideo":"Drop video to upload","actionTitleFile":"Add file","actionTitleImage":"Add image","actionTitleVideo":"Add video","actionHintFile":"or drop file to upload","actionHintImage":"or drop image to upload","actionHintVideo":"or drop video to upload","labelFile":"Upload file","labelImage":"Upload image","labelVideo":"Upload video"},"allowMultiple":{"overlayTextFile":"Drop files to upload","overlayTextImage":"Drop images to upload","overlayTextVideo":"Drop videos to upload","actionTitleFile":"Add files","actionTitleImage":"Add images","actionTitleVideo":"Add videos","actionHintFile":"or drop files to upload","actionHintImage":"or drop images to upload","actionHintVideo":"or drop videos to upload","labelFile":"Upload files","labelImage":"Upload images","labelVideo":"Upload videos"},"errorOverlayTextFile":"File type is not valid","errorOverlayTextImage":"Image type is not valid","errorOverlayTextVideo":"Video type is not valid"},"EmptySearchResult":{"altText":"Empty search results"},"Frame":{"skipToContent":"Skip to content","navigationLabel":"Navigation","Navigation":{"closeMobileNavigationLabel":"Close navigation"}},"FullscreenBar":{"back":"Back","accessibilityLabel":"Exit fullscreen mode"},"Filters":{"moreFilters":"More filters","moreFiltersWithCount":"More filters ({count})","filter":"Filter {resourceName}","noFiltersApplied":"No filters applied","cancel":"Cancel","done":"Done","clearAllFilters":"Clear all filters","clear":"Clear","clearLabel":"Clear {filterName}","addFilter":"Add filter","clearFilters":"Clear all","searchInView":"in:{viewName}"},"FilterPill":{"clear":"Clear","unsavedChanges":"Unsaved changes - {label}"},"IndexFilters":{"searchFilterTooltip":"Search and filter","searchFilterTooltipWithShortcut":"Search and filter (F)","searchFilterAccessibilityLabel":"Search and filter results","sort":"Sort your results","addView":"Add a new view","newView":"Custom search","SortButton":{"ariaLabel":"Sort the results","tooltip":"Sort","title":"Sort by","sorting":{"asc":"Ascending","desc":"Descending","az":"A-Z","za":"Z-A"}},"EditColumnsButton":{"tooltip":"Edit columns","accessibilityLabel":"Customize table column order and visibility"},"UpdateButtons":{"cancel":"Cancel","update":"Update","save":"Save","saveAs":"Save as","modal":{"title":"Save view as","label":"Name","sameName":"A view with this name already exists. Please choose a different name.","save":"Save","cancel":"Cancel"}}},"IndexProvider":{"defaultItemSingular":"Item","defaultItemPlural":"Items","allItemsSelected":"All {itemsLength}+ {resourceNamePlural} are selected","selected":"{selectedItemsCount} selected","a11yCheckboxDeselectAllSingle":"Deselect {resourceNameSingular}","a11yCheckboxSelectAllSingle":"Select {resourceNameSingular}","a11yCheckboxDeselectAllMultiple":"Deselect all {itemsLength} {resourceNamePlural}","a11yCheckboxSelectAllMultiple":"Select all {itemsLength} {resourceNamePlural}"},"IndexTable":{"emptySearchTitle":"No {resourceNamePlural} found","emptySearchDescription":"Try changing the filters or search term","onboardingBadgeText":"New","resourceLoadingAccessibilityLabel":"Loading {resourceNamePlural}…","selectAllLabel":"Select all {resourceNamePlural}","selected":"{selectedItemsCount} selected","undo":"Undo","selectAllItems":"Select all {itemsLength}+ {resourceNamePlural}","selectItem":"Select {resourceName}","selectButtonText":"Select","sortAccessibilityLabel":"sort {direction} by"},"Loading":{"label":"Page loading bar"},"Modal":{"iFrameTitle":"body markup","modalWarning":"These required properties are missing from Modal: {missingProps}"},"Page":{"Header":{"rollupActionsLabel":"View actions for {title}","pageReadyAccessibilityLabel":"{title}. This page is ready"}},"Pagination":{"previous":"Previous","next":"Next","pagination":"Pagination"},"ProgressBar":{"negativeWarningMessage":"Values passed to the progress prop shouldn’t be negative. Resetting {progress} to 0.","exceedWarningMessage":"Values passed to the progress prop shouldn’t exceed 100. Setting {progress} to 100."},"ResourceList":{"sortingLabel":"Sort by","defaultItemSingular":"item","defaultItemPlural":"items","showing":"Showing {itemsCount} {resource}","showingTotalCount":"Showing {itemsCount} of {totalItemsCount} {resource}","loading":"Loading {resource}","selected":"{selectedItemsCount} selected","allItemsSelected":"All {itemsLength}+ {resourceNamePlural} in your store are selected","allFilteredItemsSelected":"All {itemsLength}+ {resourceNamePlural} in this filter are selected","selectAllItems":"Select all {itemsLength}+ {resourceNamePlural} in your store","selectAllFilteredItems":"Select all {itemsLength}+ {resourceNamePlural} in this filter","emptySearchResultTitle":"No {resourceNamePlural} found","emptySearchResultDescription":"Try changing the filters or search term","selectButtonText":"Select","a11yCheckboxDeselectAllSingle":"Deselect {resourceNameSingular}","a11yCheckboxSelectAllSingle":"Select {resourceNameSingular}","a11yCheckboxDeselectAllMultiple":"Deselect all {itemsLength} {resourceNamePlural}","a11yCheckboxSelectAllMultiple":"Select all {itemsLength} {resourceNamePlural}","Item":{"actionsDropdownLabel":"Actions for {accessibilityLabel}","actionsDropdown":"Actions dropdown","viewItem":"View details for {itemName}"},"BulkActions":{"actionsActivatorLabel":"Actions","moreActionsActivatorLabel":"More actions"}},"SkeletonPage":{"loadingLabel":"Page loading"},"Tabs":{"newViewAccessibilityLabel":"Create new view","newViewTooltip":"Create view","toggleTabsLabel":"More views","Tab":{"rename":"Rename view","duplicate":"Duplicate view","edit":"Edit view","editColumns":"Edit columns","delete":"Delete view","copy":"Copy of {name}","deleteModal":{"title":"Delete view?","description":"This can’t be undone. {viewName} view will no longer be available in your admin.","cancel":"Cancel","delete":"Delete view"}},"RenameModal":{"title":"Rename view","label":"Name","cancel":"Cancel","create":"Save","errors":{"sameName":"A view with this name already exists. Please choose a different name."}},"DuplicateModal":{"title":"Duplicate view","label":"Name","cancel":"Cancel","create":"Create view","errors":{"sameName":"A view with this name already exists. Please choose a different name."}},"CreateViewModal":{"title":"Create new view","label":"Name","cancel":"Cancel","create":"Create view","errors":{"sameName":"A view with this name already exists. Please choose a different name."}}},"Tag":{"ariaLabel":"Remove {children}"},"TextField":{"characterCount":"{count} characters","characterCountWithMaxLength":"{count} of {limit} characters used"},"TooltipOverlay":{"accessibilityLabel":"Tooltip: {label}"},"TopBar":{"toggleMenuLabel":"Toggle menu","SearchField":{"clearButtonLabel":"Clear","search":"Search"}},"MediaCard":{"dismissButton":"Dismiss","popoverButton":"Actions"},"VideoThumbnail":{"playButtonA11yLabel":{"default":"Play video","defaultWithDuration":"Play video of length {duration}","duration":{"hours":{"other":{"only":"{hourCount} hours","andMinutes":"{hourCount} hours and {minuteCount} minutes","andMinute":"{hourCount} hours and {minuteCount} minute","minutesAndSeconds":"{hourCount} hours, {minuteCount} minutes, and {secondCount} seconds","minutesAndSecond":"{hourCount} hours, {minuteCount} minutes, and {secondCount} second","minuteAndSeconds":"{hourCount} hours, {minuteCount} minute, and {secondCount} seconds","minuteAndSecond":"{hourCount} hours, {minuteCount} minute, and {secondCount} second","andSeconds":"{hourCount} hours and {secondCount} seconds","andSecond":"{hourCount} hours and {secondCount} second"},"one":{"only":"{hourCount} hour","andMinutes":"{hourCount} hour and {minuteCount} minutes","andMinute":"{hourCount} hour and {minuteCount} minute","minutesAndSeconds":"{hourCount} hour, {minuteCount} minutes, and {secondCount} seconds","minutesAndSecond":"{hourCount} hour, {minuteCount} minutes, and {secondCount} second","minuteAndSeconds":"{hourCount} hour, {minuteCount} minute, and {secondCount} seconds","minuteAndSecond":"{hourCount} hour, {minuteCount} minute, and {secondCount} second","andSeconds":"{hourCount} hour and {secondCount} seconds","andSecond":"{hourCount} hour and {secondCount} second"}},"minutes":{"other":{"only":"{minuteCount} minutes","andSeconds":"{minuteCount} minutes and {secondCount} seconds","andSecond":"{minuteCount} minutes and {secondCount} second"},"one":{"only":"{minuteCount} minute","andSeconds":"{minuteCount} minute and {secondCount} seconds","andSecond":"{minuteCount} minute and {secondCount} second"}},"seconds":{"other":"{secondCount} seconds","one":"{secondCount} second"}}}}}');
 const enTranslations = {
@@ -3538,7 +3387,7 @@ function ChatWidget({ propertyId, widgetId }) {
   }, [propertyId, widgetId]);
   return null;
 }
-const loader$8 = async ({
+const loader$9 = async ({
   request
 }) => {
   await authenticate.admin(request);
@@ -3583,12 +3432,12 @@ const ErrorBoundary = UNSAFE_withErrorBoundaryProps(function ErrorBoundary2() {
 const headers = (headersArgs) => {
   return boundary.headers(headersArgs);
 };
-const route13 = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
+const route12 = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
   __proto__: null,
   ErrorBoundary,
   default: app,
   headers,
-  loader: loader$8
+  loader: loader$9
 }, Symbol.toStringTag, { value: "Module" }));
 function hexToRgb(hex) {
   const h = hex.replace("#", "").padEnd(6, "0").slice(0, 6);
@@ -4388,7 +4237,7 @@ function PartRow({
   );
 }
 const CANVAS_SIZE$1 = 520;
-async function loader$7({
+async function loader$8({
   request,
   params
 }) {
@@ -4417,7 +4266,7 @@ async function loader$7({
     config
   };
 }
-async function action$9({
+async function action$a({
   request,
   params
 }) {
@@ -4644,7 +4493,7 @@ function AddQuestionModal({
         background: "#fff",
         borderRadius: 14,
         padding: 24,
-        width: 500,
+        width: 600,
         maxWidth: "92vw",
         boxShadow: "0 20px 60px rgba(0,0,0,0.25)"
       },
@@ -4865,7 +4714,7 @@ function AddLayerModal({
         background: "#fff",
         borderRadius: 14,
         padding: 24,
-        width: 500,
+        width: 600,
         maxWidth: "92vw",
         boxShadow: "0 20px 60px rgba(0,0,0,0.25)"
       },
@@ -4982,123 +4831,113 @@ function AddLayerModal({
 function getQuestionIcon(q) {
   var _a, _b;
   const dt = q.displayType;
-  if (q.type === "thumbnail" && dt === "image") return /* @__PURE__ */ jsx("span", {
+  const badge = (bg, icon) => /* @__PURE__ */ jsx("span", {
     style: {
-      fontSize: 11,
-      color: "#0ea5e9"
+      width: 18,
+      height: 18,
+      background: bg,
+      borderRadius: 4,
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "center",
+      fontSize: 10,
+      color: "#fff",
+      fontWeight: 700,
+      flexShrink: 0
     },
-    children: "🏔"
+    children: icon
   });
-  if (q.type === "thumbnail" && dt === "color") return /* @__PURE__ */ jsx("span", {
-    style: {
-      fontSize: 11,
-      color: "#f59e0b"
-    },
-    children: "💧"
-  });
-  switch (q.type) {
-    case "color":
-      return /* @__PURE__ */ jsx("span", {
-        style: {
-          display: "inline-block",
-          width: 12,
-          height: 12,
-          borderRadius: "50%",
-          background: ((_b = (_a = q.swatches) == null ? void 0 : _a[0]) == null ? void 0 : _b.value) ?? "#888",
-          border: "1px solid rgba(0,0,0,0.1)",
-          flexShrink: 0
-        }
-      });
-    case "thumbnail":
-      return /* @__PURE__ */ jsx("span", {
-        style: {
-          fontSize: 11,
-          color: "#0ea5e9",
-          fontWeight: 700
-        },
-        children: "⊞"
-      });
-    case "text":
-      return /* @__PURE__ */ jsx("span", {
-        style: {
-          fontWeight: 800,
-          fontSize: 12,
-          color: "#10b981",
-          lineHeight: 1
-        },
-        children: "T"
-      });
-    case "file":
-      return /* @__PURE__ */ jsx("span", {
-        style: {
-          fontSize: 11,
-          color: "#ef4444"
-        },
-        children: "↑"
-      });
-    case "dropdown":
-      return /* @__PURE__ */ jsx("span", {
-        style: {
-          fontSize: 10,
-          color: "#6366f1"
-        },
-        children: "▼"
-      });
-    case "radio":
-      return /* @__PURE__ */ jsx("span", {
-        style: {
-          fontSize: 10,
-          color: "#6366f1"
-        },
-        children: "◉"
-      });
-    case "checkbox":
-      return /* @__PURE__ */ jsx("span", {
-        style: {
-          fontSize: 10,
-          color: "#10b981"
-        },
-        children: "☑"
-      });
-    case "label":
-      return /* @__PURE__ */ jsx("span", {
-        style: {
-          fontSize: 10,
-          color: "#22c55e"
-        },
-        children: "⊟"
-      });
-    case "group":
-      return /* @__PURE__ */ jsx("span", {
-        style: {
-          fontSize: 11,
-          color: "#6b7280"
-        },
-        children: "📁"
-      });
-    case "none":
-      return /* @__PURE__ */ jsx("span", {
-        style: {
-          fontSize: 11,
-          color: "#9ca3af"
-        },
-        children: "⊘"
-      });
-    default:
-      return /* @__PURE__ */ jsx("span", {
-        style: {
-          fontSize: 10,
-          color: "#9ca3af"
-        },
-        children: "?"
-      });
+  if (q.type === "thumbnail" && dt === "image") return badge("#0ea5e9", "🏔");
+  if (q.type === "thumbnail" && dt === "color") return badge("#f59e0b", "💧");
+  if (q.type === "color") {
+    return /* @__PURE__ */ jsx("span", {
+      style: {
+        display: "inline-block",
+        width: 18,
+        height: 18,
+        borderRadius: "50%",
+        background: ((_b = (_a = q.swatches) == null ? void 0 : _a[0]) == null ? void 0 : _b.value) ?? "#888",
+        border: "1px solid rgba(0,0,0,0.15)",
+        flexShrink: 0
+      }
+    });
   }
+  const meta = INPUT_TYPE_CONFIG.find((c) => c.type === q.type);
+  return badge((meta == null ? void 0 : meta.bg) ?? "#9ca3af", (meta == null ? void 0 : meta.icon) ?? "?");
+}
+function getLinkedLayersFor(q, layers) {
+  const ids = /* @__PURE__ */ new Set();
+  const linkedLayerId = q.linkedLayerId;
+  if (linkedLayerId) ids.add(linkedLayerId);
+  for (const id of q.applyOn ?? []) ids.add(id);
+  return Array.from(ids).map((id) => layers.find((l) => l.id === id)).filter((l) => !!l).map((l) => ({
+    id: l.id,
+    name: l.name
+  }));
+}
+function useSideMenu(remeasureDeps = []) {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [menuPos, setMenuPos] = useState(null);
+  const btnRef = useRef(null);
+  const menuRef = useRef(null);
+  const openMenu = () => {
+    var _a;
+    const rect = (_a = btnRef.current) == null ? void 0 : _a.getBoundingClientRect();
+    if (!rect) return;
+    setMenuPos({
+      top: rect.top,
+      left: rect.right + 6
+    });
+    setMenuOpen(true);
+  };
+  const closeMenu = () => setMenuOpen(false);
+  useEffect(() => {
+    if (!menuOpen) return;
+    const handleClickOutside = (e) => {
+      var _a, _b;
+      const target = e.target;
+      if ((_a = btnRef.current) == null ? void 0 : _a.contains(target)) return;
+      if ((_b = menuRef.current) == null ? void 0 : _b.contains(target)) return;
+      setMenuOpen(false);
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, [menuOpen]);
+  useLayoutEffect(() => {
+    var _a;
+    if (!menuOpen || !menuPos) return;
+    const menuEl = menuRef.current;
+    const btnRect = (_a = btnRef.current) == null ? void 0 : _a.getBoundingClientRect();
+    if (!menuEl || !btnRect) return;
+    const menuRect = menuEl.getBoundingClientRect();
+    let {
+      top,
+      left
+    } = menuPos;
+    left = btnRect.right + 6 + menuRect.width <= window.innerWidth ? btnRect.right + 6 : Math.max(6, btnRect.left - menuRect.width - 6);
+    top = Math.min(top, Math.max(6, window.innerHeight - menuRect.height - 6));
+    if (top !== menuPos.top || left !== menuPos.left) {
+      setMenuPos({
+        top,
+        left
+      });
+    }
+  }, [menuOpen, menuPos, ...remeasureDeps]);
+  return {
+    menuOpen,
+    menuPos,
+    btnRef,
+    menuRef,
+    openMenu,
+    closeMenu
+  };
 }
 function QuestionRow({
   q,
   selected,
   layerName,
   onSelect,
+  onMoveToScene,
   onDuplicate,
   onDelete,
   isDragging,
@@ -5108,7 +4947,19 @@ function QuestionRow({
   onDrop,
   onDragEnd
 }) {
-  const [menuOpen, setMenuOpen] = useState(false);
+  const [duplicateOpen, setDuplicateOpen] = useState(false);
+  const {
+    menuOpen,
+    menuPos,
+    btnRef: menuBtnRef,
+    menuRef,
+    openMenu,
+    closeMenu
+  } = useSideMenu([duplicateOpen]);
+  const closeAll = () => {
+    closeMenu();
+    setDuplicateOpen(false);
+  };
   return /* @__PURE__ */ jsxs("div", {
     draggable: true,
     onDragStart,
@@ -5119,7 +4970,6 @@ function QuestionRow({
       position: "relative",
       opacity: isDragging ? 0.35 : 1
     },
-    onMouseLeave: () => setMenuOpen(false),
     children: [/* @__PURE__ */ jsxs("div", {
       onClick: onSelect,
       style: {
@@ -5167,9 +5017,14 @@ function QuestionRow({
         },
         children: ["→ ", layerName]
       }), /* @__PURE__ */ jsx("button", {
+        ref: menuBtnRef,
         onClick: (e) => {
           e.stopPropagation();
-          setMenuOpen((o) => !o);
+          if (menuOpen) {
+            closeAll();
+          } else {
+            openMenu();
+          }
         },
         style: {
           background: "none",
@@ -5184,24 +5039,25 @@ function QuestionRow({
         },
         children: "⋮"
       })]
-    }), menuOpen && /* @__PURE__ */ jsxs("div", {
+    }), menuOpen && menuPos && createPortal(/* @__PURE__ */ jsxs("div", {
+      ref: menuRef,
       style: {
-        position: "absolute",
-        right: 8,
-        top: "100%",
-        zIndex: 50,
+        position: "fixed",
+        top: menuPos.top,
+        left: menuPos.left,
+        zIndex: 1e3,
         background: "#fff",
         border: "1px solid #e5e7eb",
         borderRadius: 8,
         boxShadow: "0 4px 16px rgba(0,0,0,0.12)",
-        minWidth: 160,
+        minWidth: 220,
         overflow: "hidden"
       },
-      children: [/* @__PURE__ */ jsx("button", {
+      children: [onMoveToScene && /* @__PURE__ */ jsx("button", {
         onClick: (e) => {
           e.stopPropagation();
-          onDuplicate();
-          setMenuOpen(false);
+          onMoveToScene();
+          closeAll();
         },
         style: {
           display: "block",
@@ -5214,12 +5070,108 @@ function QuestionRow({
           fontSize: 13,
           color: "#374151"
         },
-        children: "Duplicate"
+        children: "Move behind the scene"
+      }), /* @__PURE__ */ jsxs("div", {
+        children: [/* @__PURE__ */ jsxs("button", {
+          onClick: (e) => {
+            e.stopPropagation();
+            setDuplicateOpen((o) => !o);
+          },
+          style: {
+            display: "flex",
+            alignItems: "center",
+            width: "100%",
+            textAlign: "left",
+            padding: "9px 14px",
+            border: "none",
+            background: duplicateOpen ? "#f9fafb" : "none",
+            cursor: "pointer",
+            fontSize: 13,
+            color: "#374151"
+          },
+          children: [/* @__PURE__ */ jsx("span", {
+            style: {
+              flex: 1
+            },
+            children: "Duplicate"
+          }), /* @__PURE__ */ jsx("span", {
+            style: {
+              fontSize: 10,
+              color: "#9ca3af"
+            },
+            children: duplicateOpen ? "▾" : "▸"
+          })]
+        }), duplicateOpen && /* @__PURE__ */ jsxs("div", {
+          style: {
+            borderTop: "1px solid #f3f4f6"
+          },
+          children: [/* @__PURE__ */ jsxs("button", {
+            onClick: (e) => {
+              e.stopPropagation();
+              onDuplicate("import");
+              closeAll();
+            },
+            style: {
+              display: "block",
+              width: "100%",
+              textAlign: "left",
+              padding: "8px 14px 8px 24px",
+              border: "none",
+              background: "none",
+              cursor: "pointer"
+            },
+            children: [/* @__PURE__ */ jsx("span", {
+              style: {
+                display: "block",
+                fontSize: 13,
+                color: "#374151"
+              },
+              children: "Import answers"
+            }), /* @__PURE__ */ jsx("span", {
+              style: {
+                display: "block",
+                fontSize: 11,
+                color: "#9ca3af"
+              },
+              children: "Link the answers to the original"
+            })]
+          }), /* @__PURE__ */ jsxs("button", {
+            onClick: (e) => {
+              e.stopPropagation();
+              onDuplicate("copy");
+              closeAll();
+            },
+            style: {
+              display: "block",
+              width: "100%",
+              textAlign: "left",
+              padding: "8px 14px 8px 24px",
+              border: "none",
+              background: "none",
+              cursor: "pointer"
+            },
+            children: [/* @__PURE__ */ jsx("span", {
+              style: {
+                display: "block",
+                fontSize: 13,
+                color: "#374151"
+              },
+              children: "Copy answers"
+            }), /* @__PURE__ */ jsx("span", {
+              style: {
+                display: "block",
+                fontSize: 11,
+                color: "#9ca3af"
+              },
+              children: "Separate the answers from the original"
+            })]
+          })]
+        })]
       }), /* @__PURE__ */ jsx("button", {
         onClick: (e) => {
           e.stopPropagation();
           onDelete();
-          setMenuOpen(false);
+          closeAll();
         },
         style: {
           display: "block",
@@ -5230,11 +5182,12 @@ function QuestionRow({
           background: "none",
           cursor: "pointer",
           fontSize: 13,
-          color: "#ef4444"
+          color: "#ef4444",
+          borderTop: "1px solid #f3f4f6"
         },
         children: "Delete"
       })]
-    })]
+    }), document.body)]
   });
 }
 function GroupRow({
@@ -5447,9 +5400,12 @@ function GroupRow({
 function LayerRow({
   layer,
   selected,
-  linkedNames,
+  linkedItems,
   onSelect,
+  onSelectLinked,
   onRemove,
+  onMoveToQuestions,
+  onDuplicate,
   isDragging,
   isDragOver,
   onDragStart,
@@ -5460,6 +5416,19 @@ function LayerRow({
   const dt = layer.displayType;
   const dtMeta = dt ? DISPLAY_TYPE_META[dt] : null;
   const dtBg = dt ? LAYER_DISPLAY_COLORS[dt] ?? "#6b7280" : "#d1d5db";
+  const [duplicateOpen, setDuplicateOpen] = useState(false);
+  const {
+    menuOpen,
+    menuPos,
+    btnRef: menuBtnRef,
+    menuRef,
+    openMenu,
+    closeMenu
+  } = useSideMenu([duplicateOpen]);
+  const closeAll = () => {
+    closeMenu();
+    setDuplicateOpen(false);
+  };
   return /* @__PURE__ */ jsxs("div", {
     draggable: true,
     onDragStart,
@@ -5533,33 +5502,196 @@ function LayerRow({
         },
         children: layer.type === "colorable" ? "color" : "static"
       }), /* @__PURE__ */ jsx("button", {
+        ref: menuBtnRef,
         onClick: (e) => {
           e.stopPropagation();
-          onRemove();
+          if (menuOpen) {
+            closeAll();
+          } else {
+            openMenu();
+          }
         },
         style: {
           background: "none",
           border: "none",
-          color: "#d1d5db",
+          color: "#9ca3af",
           cursor: "pointer",
           fontSize: 14,
           lineHeight: 1,
-          padding: 0
+          padding: "2px 4px",
+          flexShrink: 0,
+          borderRadius: 4
         },
-        children: "×"
+        children: "⋮"
       })]
-    }), linkedNames && linkedNames.length > 0 && /* @__PURE__ */ jsx("div", {
+    }), menuOpen && menuPos && createPortal(/* @__PURE__ */ jsxs("div", {
+      ref: menuRef,
+      style: {
+        position: "fixed",
+        top: menuPos.top,
+        left: menuPos.left,
+        zIndex: 1e3,
+        background: "#fff",
+        border: "1px solid #e5e7eb",
+        borderRadius: 8,
+        boxShadow: "0 4px 16px rgba(0,0,0,0.12)",
+        minWidth: 220,
+        overflow: "hidden"
+      },
+      children: [onMoveToQuestions && /* @__PURE__ */ jsx("button", {
+        onClick: (e) => {
+          e.stopPropagation();
+          onMoveToQuestions();
+          closeAll();
+        },
+        style: {
+          display: "block",
+          width: "100%",
+          textAlign: "left",
+          padding: "9px 14px",
+          border: "none",
+          background: "none",
+          cursor: "pointer",
+          fontSize: 13,
+          color: "#374151"
+        },
+        children: "Move to Question panel"
+      }), onDuplicate && /* @__PURE__ */ jsxs("div", {
+        children: [/* @__PURE__ */ jsxs("button", {
+          onClick: (e) => {
+            e.stopPropagation();
+            setDuplicateOpen((o) => !o);
+          },
+          style: {
+            display: "flex",
+            alignItems: "center",
+            width: "100%",
+            textAlign: "left",
+            padding: "9px 14px",
+            border: "none",
+            background: duplicateOpen ? "#f9fafb" : "none",
+            cursor: "pointer",
+            fontSize: 13,
+            color: "#374151"
+          },
+          children: [/* @__PURE__ */ jsx("span", {
+            style: {
+              flex: 1
+            },
+            children: "Duplicate"
+          }), /* @__PURE__ */ jsx("span", {
+            style: {
+              fontSize: 10,
+              color: "#9ca3af"
+            },
+            children: duplicateOpen ? "▾" : "▸"
+          })]
+        }), duplicateOpen && /* @__PURE__ */ jsxs("div", {
+          style: {
+            borderTop: "1px solid #f3f4f6"
+          },
+          children: [/* @__PURE__ */ jsxs("button", {
+            onClick: (e) => {
+              e.stopPropagation();
+              onDuplicate("import");
+              closeAll();
+            },
+            style: {
+              display: "block",
+              width: "100%",
+              textAlign: "left",
+              padding: "8px 14px 8px 24px",
+              border: "none",
+              background: "none",
+              cursor: "pointer"
+            },
+            children: [/* @__PURE__ */ jsx("span", {
+              style: {
+                display: "block",
+                fontSize: 13,
+                color: "#374151"
+              },
+              children: "Import answers"
+            }), /* @__PURE__ */ jsx("span", {
+              style: {
+                display: "block",
+                fontSize: 11,
+                color: "#9ca3af"
+              },
+              children: "Link the answers to the original"
+            })]
+          }), /* @__PURE__ */ jsxs("button", {
+            onClick: (e) => {
+              e.stopPropagation();
+              onDuplicate("copy");
+              closeAll();
+            },
+            style: {
+              display: "block",
+              width: "100%",
+              textAlign: "left",
+              padding: "8px 14px 8px 24px",
+              border: "none",
+              background: "none",
+              cursor: "pointer"
+            },
+            children: [/* @__PURE__ */ jsx("span", {
+              style: {
+                display: "block",
+                fontSize: 13,
+                color: "#374151"
+              },
+              children: "Copy answers"
+            }), /* @__PURE__ */ jsx("span", {
+              style: {
+                display: "block",
+                fontSize: 11,
+                color: "#9ca3af"
+              },
+              children: "Separate the answers from the original"
+            })]
+          })]
+        })]
+      }), /* @__PURE__ */ jsx("button", {
+        onClick: (e) => {
+          e.stopPropagation();
+          onRemove();
+          closeAll();
+        },
+        style: {
+          display: "block",
+          width: "100%",
+          textAlign: "left",
+          padding: "9px 14px",
+          border: "none",
+          background: "none",
+          cursor: "pointer",
+          fontSize: 13,
+          color: "#ef4444",
+          borderTop: "1px solid #f3f4f6"
+        },
+        children: "Delete"
+      })]
+    }), document.body), linkedItems && linkedItems.length > 0 && /* @__PURE__ */ jsx("div", {
       style: {
         paddingLeft: 36,
-        paddingBottom: 4
+        paddingBottom: 4,
+        display: "flex",
+        flexDirection: "column",
+        gap: 2
       },
-      children: linkedNames.map((n) => /* @__PURE__ */ jsxs("span", {
+      children: linkedItems.map((item) => /* @__PURE__ */ jsxs("span", {
+        onClick: (e) => {
+          e.stopPropagation();
+          onSelectLinked == null ? void 0 : onSelectLinked(item.id);
+        },
         style: {
           fontSize: 11,
-          color: "#9ca3af"
+          color: "#9ca3af",
+          cursor: onSelectLinked ? "pointer" : "default"
         },
-        children: ["↳ ", n]
-      }, n))
+        children: ["↳ ", item.name]
+      }, item.id))
     })]
   });
 }
@@ -12055,6 +12187,8 @@ function NewLayerEditor({
   const applyTargetInputType = applyConf ? applyConf.targetDT === "image" ? "thumbnail" : applyConf.targetDT === "text" ? "text" : null : null;
   const matchingQuestions = applyConf ? questions.filter((q) => applyConf.targetDT === "image" ? q.type === "thumbnail" : applyConf.targetDT === "text" ? q.type === "text" : false) : [];
   const filteredApplyQuestions = matchingQuestions.filter((q) => !appliedIds.includes(q.id) && q.name.toLowerCase().includes(applySearch.toLowerCase()));
+  const matchingLayers = applyConf ? layers.filter((l) => l.type !== "glb-part" && l.id !== layer.id) : [];
+  const filteredApplyLayers = matchingLayers.filter((l) => !appliedIds.includes(l.id) && l.name.toLowerCase().includes(applySearch.toLowerCase()));
   const addAnswer = () => {
     const id = `ans-${Date.now()}`;
     const defaults = {};
@@ -12639,7 +12773,7 @@ function NewLayerEditor({
               },
               children: "+"
             })]
-          }), matchingQuestions.length > 0 && /* @__PURE__ */ jsxs(Fragment, {
+          }), (matchingQuestions.length > 0 || matchingLayers.length > 0) && /* @__PURE__ */ jsxs(Fragment, {
             children: [/* @__PURE__ */ jsx("div", {
               style: {
                 fontSize: 11,
@@ -12653,7 +12787,7 @@ function NewLayerEditor({
             }), /* @__PURE__ */ jsx("input", {
               value: applySearch,
               onChange: (e) => setApplySearch(e.target.value),
-              placeholder: "Search questions...",
+              placeholder: "Search...",
               style: {
                 ...inputSt,
                 marginBottom: 6,
@@ -12661,17 +12795,27 @@ function NewLayerEditor({
               }
             }), /* @__PURE__ */ jsxs("div", {
               style: {
-                maxHeight: 140,
+                maxHeight: 200,
                 overflowY: "auto"
               },
-              children: [filteredApplyQuestions.length === 0 && /* @__PURE__ */ jsx("p", {
+              children: [filteredApplyQuestions.length === 0 && filteredApplyLayers.length === 0 && /* @__PURE__ */ jsx("p", {
                 style: {
                   fontSize: 12,
                   color: "#9ca3af",
                   margin: "4px 0",
                   textAlign: "center"
                 },
-                children: "No matching questions"
+                children: "No matches"
+              }), filteredApplyQuestions.length > 0 && /* @__PURE__ */ jsx("div", {
+                style: {
+                  fontSize: 10,
+                  fontWeight: 700,
+                  color: "#9ca3af",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.05em",
+                  padding: "4px 8px"
+                },
+                children: "Questions"
               }), filteredApplyQuestions.map((q) => {
                 var _a2;
                 return /* @__PURE__ */ jsxs("button", {
@@ -12720,13 +12864,75 @@ function NewLayerEditor({
                     children: q.name
                   })]
                 }, q.id);
+              }), filteredApplyLayers.length > 0 && /* @__PURE__ */ jsx("div", {
+                style: {
+                  fontSize: 10,
+                  fontWeight: 700,
+                  color: "#9ca3af",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.05em",
+                  padding: "4px 8px"
+                },
+                children: "Behind the Scene"
+              }), filteredApplyLayers.map((l) => {
+                var _a2;
+                return /* @__PURE__ */ jsxs("button", {
+                  onClick: () => {
+                    onChange({
+                      ...layer,
+                      applyOn: [...appliedIds, l.id]
+                    });
+                    setShowApplyPicker(false);
+                  },
+                  style: {
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 8,
+                    width: "100%",
+                    padding: "6px 8px",
+                    border: "none",
+                    background: "none",
+                    cursor: "pointer",
+                    fontSize: 13,
+                    color: "#374151",
+                    borderRadius: 5
+                  },
+                  children: [/* @__PURE__ */ jsx("span", {
+                    style: {
+                      width: 20,
+                      height: 20,
+                      background: l.displayType ? LAYER_DISPLAY_COLORS[l.displayType] ?? "#6b7280" : "#d1d5db",
+                      borderRadius: 3,
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      fontSize: 10,
+                      color: "#fff",
+                      flexShrink: 0
+                    },
+                    children: l.displayType ? ((_a2 = DISPLAY_TYPE_META[l.displayType]) == null ? void 0 : _a2.icon) ?? "?" : "◆"
+                  }), /* @__PURE__ */ jsx("span", {
+                    style: {
+                      flex: 1,
+                      textAlign: "left",
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap"
+                    },
+                    children: l.name
+                  })]
+                }, l.id);
               })]
             })]
           })]
         }), appliedIds.map((qid) => {
+          var _a2, _b2;
           const linkedQ = questions.find((q) => q.id === qid);
-          if (!linkedQ) return null;
-          const qTypeMeta = INPUT_TYPE_CONFIG.find((c) => c.type === linkedQ.type);
+          const linkedL = !linkedQ ? layers.find((l) => l.id === qid) : null;
+          if (!linkedQ && !linkedL) return null;
+          const qTypeMeta = linkedQ ? INPUT_TYPE_CONFIG.find((c) => c.type === linkedQ.type) : null;
+          const badgeBg = linkedQ ? (qTypeMeta == null ? void 0 : qTypeMeta.bg) ?? "#6b7280" : (linkedL == null ? void 0 : linkedL.displayType) ? LAYER_DISPLAY_COLORS[linkedL.displayType] ?? "#6b7280" : "#d1d5db";
+          const badgeIcon = linkedQ ? (qTypeMeta == null ? void 0 : qTypeMeta.icon) ?? "?" : (linkedL == null ? void 0 : linkedL.displayType) ? ((_a2 = DISPLAY_TYPE_META[linkedL.displayType]) == null ? void 0 : _a2.icon) ?? "?" : "◆";
           return /* @__PURE__ */ jsxs("div", {
             style: {
               display: "flex",
@@ -12743,7 +12949,7 @@ function NewLayerEditor({
               style: {
                 width: 18,
                 height: 18,
-                background: (qTypeMeta == null ? void 0 : qTypeMeta.bg) ?? "#6b7280",
+                background: badgeBg,
                 borderRadius: 3,
                 display: "flex",
                 alignItems: "center",
@@ -12752,7 +12958,7 @@ function NewLayerEditor({
                 color: "#fff",
                 flexShrink: 0
               },
-              children: (qTypeMeta == null ? void 0 : qTypeMeta.icon) ?? "?"
+              children: badgeIcon
             }), /* @__PURE__ */ jsx("span", {
               style: {
                 flex: 1,
@@ -12762,7 +12968,7 @@ function NewLayerEditor({
                 textOverflow: "ellipsis",
                 whiteSpace: "nowrap"
               },
-              children: linkedQ.name
+              children: (_b2 = linkedQ ?? linkedL) == null ? void 0 : _b2.name
             }), /* @__PURE__ */ jsx("button", {
               onClick: () => onChange({
                 ...layer,
@@ -14372,12 +14578,13 @@ const app_configuratorSetup_$productId = UNSAFE_withComponentProps(function Buil
     } : q));
     if ((selected == null ? void 0 : selected.id) === id) setSelected(null);
   };
-  const duplicateQ = (id) => {
+  const duplicateQ = (id, mode) => {
     const src = questions.find((q) => q.id === id);
     if (!src) return;
     const newId = `${src.type}-${Date.now()}`;
+    const base = mode === "copy" ? JSON.parse(JSON.stringify(src)) : src;
     setQuestions((p) => [...p, {
-      ...src,
+      ...base,
       id: newId,
       name: `${src.name} (copy)`
     }]);
@@ -14732,6 +14939,24 @@ const app_configuratorSetup_$productId = UNSAFE_withComponentProps(function Buil
     setLayers((p) => p.filter((l) => l.id !== id));
     if ((selected == null ? void 0 : selected.id) === id) setSelected(null);
   };
+  const duplicateL = (id, mode) => {
+    const src = layers.find((l) => l.id === id);
+    if (!src) return;
+    const newId = `${src.displayType ?? src.type}-${Date.now()}`;
+    const answers = mode === "copy" ? (src.answers ?? []).map((a) => ({
+      ...a
+    })) : src.answers;
+    setLayers((p) => [...p, {
+      ...src,
+      id: newId,
+      name: `${src.name} (copy)`,
+      answers
+    }]);
+    setSelected({
+      kind: "layer",
+      id: newId
+    });
+  };
   const addNewLayer = (layerType, displayType) => {
     var _a;
     const baseName = ((_a = DISPLAY_TYPE_META[displayType]) == null ? void 0 : _a.label) ?? displayType;
@@ -14920,6 +15145,126 @@ const app_configuratorSetup_$productId = UNSAFE_withComponentProps(function Buil
     setQuestions((p) => [...p, newQ]);
     setSelected({
       kind: "question",
+      id
+    });
+  };
+  const convertQuestionToLayer = (q) => {
+    const {
+      id,
+      name
+    } = q;
+    let newLayer;
+    switch (q.type) {
+      case "thumbnail": {
+        const tq = q;
+        newLayer = {
+          id,
+          name,
+          type: "static",
+          src: "",
+          displayType: tq.displayType ?? "image",
+          answers: (tq.swatches ?? []).map((s) => ({
+            id: s.value,
+            label: s.label,
+            imageUrl: s.imageUrl,
+            viewImages: s.viewImages,
+            description: s.description,
+            productionCode: s.productionCode
+          })),
+          applyOn: tq.applyOn
+        };
+        break;
+      }
+      case "color": {
+        const cq = q;
+        newLayer = {
+          id,
+          name,
+          type: "static",
+          src: "",
+          displayType: cq.displayType ?? "color",
+          answers: (cq.swatches ?? []).map((s) => ({
+            id: s.value,
+            label: s.label,
+            value: s.value,
+            description: s.description,
+            productionCode: s.productionCode
+          })),
+          applyOn: cq.linkedLayerId ? [cq.linkedLayerId] : void 0
+        };
+        break;
+      }
+      case "dropdown": {
+        const dq = q;
+        newLayer = {
+          id,
+          name,
+          type: "static",
+          src: "",
+          displayType: dq.displayType ?? "none",
+          answers: (dq.options ?? []).map((o) => ({
+            id: o.value,
+            label: o.label,
+            imageUrl: o.imageUrl,
+            viewImages: o.viewImages,
+            thumbnailUrl: o.thumbnailUrl,
+            description: o.description,
+            productionCode: o.productionCode
+          }))
+        };
+        break;
+      }
+      case "radio": {
+        const rq = q;
+        newLayer = {
+          id,
+          name,
+          type: "static",
+          src: "",
+          displayType: rq.displayType || "none",
+          answers: (rq.options ?? []).map((o) => ({
+            id: o.value,
+            label: o.label
+          }))
+        };
+        break;
+      }
+      case "label": {
+        const lq = q;
+        newLayer = {
+          id,
+          name,
+          type: "static",
+          src: "",
+          displayType: lq.displayType || "none",
+          answers: (lq.answers ?? []).map((a) => ({
+            id: a.value,
+            label: a.label,
+            imageUrl: a.imageUrl,
+            viewImages: a.viewImages,
+            description: a.description,
+            productionCode: a.productionCode
+          }))
+        };
+        break;
+      }
+      case "group":
+        return;
+      // grouping is a Questions-list-only concept, no Behind the scene equivalent
+      default:
+        newLayer = {
+          id,
+          name,
+          type: "static",
+          src: "",
+          displayType: q.displayType || "none"
+        };
+        break;
+    }
+    setQuestions((p) => p.filter((oq) => oq.id !== id));
+    setLayers((p) => [...p, newLayer]);
+    setSelected({
+      kind: "layer",
       id
     });
   };
@@ -15564,13 +15909,13 @@ const app_configuratorSetup_$productId = UNSAFE_withComponentProps(function Buil
                         var _a2;
                         const child = questions.find((oq) => oq.id === childId);
                         if (!child) return null;
-                        return /* @__PURE__ */ jsx("div", {
+                        return /* @__PURE__ */ jsxs("div", {
                           style: {
                             paddingLeft: 18,
                             borderLeft: "2px solid #e5e7eb",
                             marginLeft: 18
                           },
-                          children: /* @__PURE__ */ jsx(QuestionRow, {
+                          children: [/* @__PURE__ */ jsx(QuestionRow, {
                             q: child,
                             selected: (selected == null ? void 0 : selected.id) === child.id,
                             layerName: child.type === "color" || child.type === "thumbnail" ? (_a2 = layers.find((l) => l.id === child.linkedLayerId)) == null ? void 0 : _a2.name : void 0,
@@ -15578,7 +15923,8 @@ const app_configuratorSetup_$productId = UNSAFE_withComponentProps(function Buil
                               kind: "question",
                               id: child.id
                             }),
-                            onDuplicate: () => duplicateQ(child.id),
+                            onMoveToScene: child.type !== "group" ? () => convertQuestionToLayer(child) : void 0,
+                            onDuplicate: (mode) => duplicateQ(child.id, mode),
                             onDelete: () => removeQ(child.id),
                             isDragging: dragQId === child.id,
                             isDragOver: dragOverQId === child.id && dragQId !== child.id,
@@ -15586,7 +15932,23 @@ const app_configuratorSetup_$productId = UNSAFE_withComponentProps(function Buil
                             onDragOver: (e) => handleQDragOver(e, child.id),
                             onDrop: () => handleQDrop(child.id),
                             onDragEnd: handleQDragEnd
-                          })
+                          }), getLinkedLayersFor(child, layers).map((ll) => /* @__PURE__ */ jsx("div", {
+                            onClick: () => setSelected({
+                              kind: "layer",
+                              id: ll.id
+                            }),
+                            style: {
+                              padding: "2px 10px 4px 40px",
+                              cursor: "pointer"
+                            },
+                            children: /* @__PURE__ */ jsxs("span", {
+                              style: {
+                                fontSize: 11,
+                                color: (selected == null ? void 0 : selected.id) === ll.id ? "#3b82f6" : "#9ca3af"
+                              },
+                              children: ["↳ ", ll.name]
+                            })
+                          }, ll.id))]
                         }, childId);
                       })]
                     }, q.id);
@@ -15603,7 +15965,8 @@ const app_configuratorSetup_$productId = UNSAFE_withComponentProps(function Buil
                         });
                         setEditingPrintAreaId(null);
                       },
-                      onDuplicate: () => duplicateQ(q.id),
+                      onMoveToScene: () => convertQuestionToLayer(q),
+                      onDuplicate: (mode) => duplicateQ(q.id, mode),
                       onDelete: () => removeQ(q.id),
                       isDragging: dragQId === q.id,
                       isDragOver: dragOverQId === q.id && dragQId !== q.id,
@@ -15639,7 +16002,23 @@ const app_configuratorSetup_$productId = UNSAFE_withComponentProps(function Buil
                         },
                         children: ["↳ ", pa.name]
                       })]
-                    }, pa.id))]
+                    }, pa.id)), getLinkedLayersFor(q, layers).map((ll) => /* @__PURE__ */ jsx("div", {
+                      onClick: () => setSelected({
+                        kind: "layer",
+                        id: ll.id
+                      }),
+                      style: {
+                        padding: "2px 10px 4px 40px",
+                        cursor: "pointer"
+                      },
+                      children: /* @__PURE__ */ jsxs("span", {
+                        style: {
+                          fontSize: 11,
+                          color: (selected == null ? void 0 : selected.id) === ll.id ? "#3b82f6" : "#9ca3af"
+                        },
+                        children: ["↳ ", ll.name]
+                      })
+                    }, ll.id))]
                   }, q.id);
                 });
               })()]
@@ -15689,24 +16068,33 @@ const app_configuratorSetup_$productId = UNSAFE_withComponentProps(function Buil
                 minHeight: 0
               },
               children: layers.filter((l) => l.type !== "glb-part").map((l, idx) => {
-                const forwardNames = (l.applyOn ?? []).map((qid) => {
-                  var _a;
-                  return (_a = questions.find((q) => q.id === qid)) == null ? void 0 : _a.name;
-                }).filter(Boolean);
-                const reverseNames = questions.filter((q) => {
+                const forwardQs = (l.applyOn ?? []).map((qid) => questions.find((q) => q.id === qid)).filter((q) => !!q);
+                const reverseQs = questions.filter((q) => {
                   var _a;
                   return (_a = q.applyOn) == null ? void 0 : _a.includes(l.id);
-                }).map((q) => q.name);
-                const allLinkedNames = [.../* @__PURE__ */ new Set([...forwardNames, ...reverseNames])];
+                });
+                const forwardLayers = (l.applyOn ?? []).map((lid) => layers.find((ol) => ol.id === lid && ol.id !== l.id)).filter((ol) => !!ol);
+                const linkedMap = /* @__PURE__ */ new Map();
+                for (const item of [...forwardQs, ...reverseQs, ...forwardLayers]) linkedMap.set(item.id, item.name);
+                const linkedItems = Array.from(linkedMap, ([id, name]) => ({
+                  id,
+                  name
+                }));
                 return /* @__PURE__ */ jsx(LayerRow, {
                   layer: l,
                   selected: (selected == null ? void 0 : selected.id) === l.id,
-                  linkedNames: allLinkedNames,
+                  linkedItems,
                   onSelect: () => setSelected({
                     kind: "layer",
                     id: l.id
                   }),
+                  onSelectLinked: (id) => setSelected({
+                    kind: questions.some((q) => q.id === id) ? "question" : "layer",
+                    id
+                  }),
                   onRemove: () => removeL(l.id),
+                  onMoveToQuestions: () => convertLayerToQuestion(l, "thumbnail"),
+                  onDuplicate: (mode) => duplicateL(l.id, mode),
                   isDragging: dragLId === l.id,
                   isDragOver: dragOverLId === l.id && dragLId !== l.id,
                   onDragStart: () => handleLDragStart(l.id),
@@ -16815,13 +17203,13 @@ const app_configuratorSetup_$productId = UNSAFE_withComponentProps(function Buil
     })]
   });
 });
-const route14 = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
+const route13 = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
   __proto__: null,
-  action: action$9,
+  action: action$a,
   default: app_configuratorSetup_$productId,
-  loader: loader$7
+  loader: loader$8
 }, Symbol.toStringTag, { value: "Module" }));
-async function loader$6({
+async function loader$7({
   request,
   params
 }) {
@@ -16842,7 +17230,7 @@ async function loader$6({
     }
   };
 }
-async function action$8({
+async function action$9({
   request,
   params
 }) {
@@ -17773,15 +18161,15 @@ function ChoicePreviewItem({
     })
   });
 }
-const route15 = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
+const route14 = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
   __proto__: null,
-  action: action$8,
+  action: action$9,
   default: app_configuratorStyle_$productId,
-  loader: loader$6
+  loader: loader$7
 }, Symbol.toStringTag, { value: "Module" }));
 const CANVAS_SIZE = 800;
 const COORD_SCALE = CANVAS_SIZE / 800;
-async function loader$5({
+async function loader$6({
   request,
   params
 }) {
@@ -18042,6 +18430,8 @@ const app_configurator_$productId = UNSAFE_withComponentProps(function Configura
   const stageRef = useRef(null);
   const transformerRef = useRef(null);
   const [nodeRefs] = useState({});
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
   const layers = (config == null ? void 0 : config.layers) ?? [];
   const questions = migrateOptions(config == null ? void 0 : config.options, layers);
   const logicRules = ((_a = config == null ? void 0 : config.options) == null ? void 0 : _a.logicRules) ?? [];
@@ -18900,7 +19290,7 @@ const app_configurator_$productId = UNSAFE_withComponentProps(function Configura
         width: CANVAS_SIZE,
         height: CANVAS_SIZE,
         hoveredPartIds
-      }) : /* @__PURE__ */ jsx(Stage, {
+      }) : mounted ? /* @__PURE__ */ jsx(Stage, {
         width: CANVAS_SIZE,
         height: CANVAS_SIZE,
         ref: stageRef,
@@ -18989,7 +19379,7 @@ const app_configurator_$productId = UNSAFE_withComponentProps(function Configura
             boundBoxFunc: (old, nw) => nw.width < 20 || nw.height < 20 ? old : nw
           })]
         })
-      }), numViews > 1 && /* @__PURE__ */ jsxs("div", {
+      }) : null, numViews > 1 && /* @__PURE__ */ jsxs("div", {
         style: {
           display: "flex",
           alignItems: "center",
@@ -19084,12 +19474,12 @@ const app_configurator_$productId = UNSAFE_withComponentProps(function Configura
     })]
   });
 });
-const route16 = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
+const route15 = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
   __proto__: null,
   default: app_configurator_$productId,
-  loader: loader$5
+  loader: loader$6
 }, Symbol.toStringTag, { value: "Module" }));
-async function loader$4({
+async function loader$5({
   request,
   params
 }) {
@@ -19135,7 +19525,7 @@ async function loader$4({
     productId: decodedId
   };
 }
-async function action$7({
+async function action$8({
   request
 }) {
   var _a, _b;
@@ -19546,13 +19936,13 @@ const app_inventory_$productId = UNSAFE_withComponentProps(function InventoryPag
     })]
   });
 });
-const route17 = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
+const route16 = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
   __proto__: null,
-  action: action$7,
+  action: action$8,
   default: app_inventory_$productId,
-  loader: loader$4
+  loader: loader$5
 }, Symbol.toStringTag, { value: "Module" }));
-async function loader$3({
+async function loader$4({
   request,
   params
 }) {
@@ -19594,7 +19984,7 @@ async function loader$3({
     hasCustomVariants
   };
 }
-async function action$6({
+async function action$7({
   request,
   params
 }) {
@@ -20286,13 +20676,13 @@ const app_variants_$productId = UNSAFE_withComponentProps(function VariantsPage(
     })]
   });
 });
-const route18 = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
+const route17 = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
   __proto__: null,
-  action: action$6,
+  action: action$7,
   default: app_variants_$productId,
-  loader: loader$3
+  loader: loader$4
 }, Symbol.toStringTag, { value: "Module" }));
-async function loader$2({
+async function loader$3({
   request,
   params
 }) {
@@ -20332,7 +20722,7 @@ async function loader$2({
     productId: decodedId
   };
 }
-async function action$5({
+async function action$6({
   request,
   params
 }) {
@@ -22634,16 +23024,16 @@ const app_pricing_$productId = UNSAFE_withComponentProps(function PricingPage() 
     })]
   });
 });
-const route19 = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
+const route18 = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
   __proto__: null,
-  action: action$5,
+  action: action$6,
   default: app_pricing_$productId,
-  loader: loader$2
+  loader: loader$3
 }, Symbol.toStringTag, { value: "Module" }));
 function is403(e) {
   return (e == null ? void 0 : e.status) === 403;
 }
-async function action$4({
+async function action$5({
   request
 }) {
   var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l, _m, _n, _o, _p, _q, _r, _s, _t, _u, _v;
@@ -22996,12 +23386,12 @@ const HOW_IT_WORKS = [{
   title: "Preview & Publish",
   desc: "Test the configurator experience, then publish when it's ready for customers."
 }];
-const route20 = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
+const route19 = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
   __proto__: null,
-  action: action$4,
+  action: action$5,
   default: app_productPicker
 }, Symbol.toStringTag, { value: "Module" }));
-async function action$3({
+async function action$4({
   request
 }) {
   const {
@@ -23044,9 +23434,9 @@ async function action$3({
     });
   }
 }
-const route21 = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
+const route20 = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
   __proto__: null,
-  action: action$3
+  action: action$4
 }, Symbol.toStringTag, { value: "Module" }));
 const app_additional = UNSAFE_withComponentProps(function AdditionalPage() {
   return /* @__PURE__ */ jsxs("s-page", {
@@ -23083,11 +23473,11 @@ const app_additional = UNSAFE_withComponentProps(function AdditionalPage() {
     })]
   });
 });
-const route22 = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
+const route21 = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
   __proto__: null,
   default: app_additional
 }, Symbol.toStringTag, { value: "Module" }));
-async function action$2({
+async function action$3({
   request
 }) {
   var _a;
@@ -23138,11 +23528,11 @@ async function action$2({
     });
   }
 }
-const route23 = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
+const route22 = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
   __proto__: null,
-  action: action$2
+  action: action$3
 }, Symbol.toStringTag, { value: "Module" }));
-async function loader$1({
+async function loader$2({
   request
 }) {
   const {
@@ -23197,7 +23587,7 @@ async function loader$1({
     products
   };
 }
-async function action$1({
+async function action$2({
   request
 }) {
   var _a, _b, _c, _d, _e, _f, _g, _h, _i, _j, _k, _l;
@@ -23637,13 +24027,13 @@ function ProductRow({
     })]
   }, item.productId);
 }
-const route24 = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
+const route23 = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
   __proto__: null,
-  action: action$1,
+  action: action$2,
   default: app_products,
-  loader: loader$1
+  loader: loader$2
 }, Symbol.toStringTag, { value: "Module" }));
-async function loader({
+async function loader$1({
   request
 }) {
   try {
@@ -23669,7 +24059,7 @@ async function loader({
     throw error;
   }
 }
-async function action({
+async function action$1({
   request
 }) {
   const {
@@ -24294,17 +24684,188 @@ function SwatchPreviewPanel({
     })]
   });
 }
-const route25 = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
+const route24 = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
   __proto__: null,
-  action,
+  action: action$1,
   default: app_settings,
-  loader
+  loader: loader$1
 }, Symbol.toStringTag, { value: "Module" }));
+function WelcomeModal({
+  open,
+  onClose,
+  videoUrl
+}) {
+  if (!open) return null;
+  return /* @__PURE__ */ jsx(
+    "div",
+    {
+      style: {
+        position: "fixed",
+        inset: 0,
+        background: "rgba(0,0,0,0.4)",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        zIndex: 1e3
+      },
+      onClick: (e) => {
+        if (e.target === e.currentTarget) onClose();
+      },
+      children: /* @__PURE__ */ jsxs(
+        "div",
+        {
+          style: {
+            background: "#fff",
+            borderRadius: 14,
+            width: 460,
+            maxWidth: "90vw",
+            boxShadow: "0 24px 60px rgba(0,0,0,0.24)",
+            overflow: "hidden"
+          },
+          children: [
+            /* @__PURE__ */ jsxs("div", { style: {
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              padding: "16px 20px",
+              borderBottom: "1px solid #e3e3e3"
+            }, children: [
+              /* @__PURE__ */ jsx("span", { style: { fontSize: 15, fontWeight: 700, color: "#1a1d23" }, children: "Welcome to Konfig" }),
+              /* @__PURE__ */ jsx(
+                "button",
+                {
+                  onClick: onClose,
+                  "aria-label": "Close",
+                  style: { background: "none", border: "none", fontSize: 20, cursor: "pointer", color: "#6d7175", lineHeight: 1 },
+                  children: "×"
+                }
+              )
+            ] }),
+            /* @__PURE__ */ jsxs("div", { style: { padding: 20 }, children: [
+              /* @__PURE__ */ jsx("p", { style: { margin: "0 0 16px", fontSize: 13, color: "#6d7175", lineHeight: 1.55 }, children: "Here's a quick look at what you can do." }),
+              videoUrl ? /* @__PURE__ */ jsx("div", { style: { aspectRatio: "16 / 9", borderRadius: 10, overflow: "hidden", marginBottom: 18 }, children: /* @__PURE__ */ jsx(
+                "iframe",
+                {
+                  src: videoUrl,
+                  title: "Welcome to Konfig",
+                  style: { width: "100%", height: "100%", border: "none" },
+                  allow: "autoplay; encrypted-media; picture-in-picture",
+                  allowFullScreen: true
+                }
+              ) }) : /* @__PURE__ */ jsxs("div", { style: {
+                aspectRatio: "16 / 9",
+                borderRadius: 10,
+                background: "linear-gradient(155deg, #f1f2fb 0%, #e6e8fb 100%)",
+                border: "1px dashed #c7cbf5",
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 8,
+                marginBottom: 18
+              }, children: [
+                /* @__PURE__ */ jsx("div", { style: {
+                  width: 44,
+                  height: 44,
+                  borderRadius: "50%",
+                  background: "#4f46e5",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center"
+                }, children: /* @__PURE__ */ jsx("div", { style: {
+                  width: 0,
+                  height: 0,
+                  marginLeft: 3,
+                  borderTop: "7px solid transparent",
+                  borderBottom: "7px solid transparent",
+                  borderLeft: "11px solid #fff"
+                } }) }),
+                /* @__PURE__ */ jsx("span", { style: { fontSize: 12, fontWeight: 600, color: "#6355e8" }, children: "Demo video coming soon" })
+              ] })
+            ] }),
+            /* @__PURE__ */ jsx("div", { style: { padding: "0 20px 20px" }, children: /* @__PURE__ */ jsx(
+              "button",
+              {
+                onClick: onClose,
+                style: {
+                  width: "100%",
+                  background: "#4f46e5",
+                  color: "#fff",
+                  border: "none",
+                  borderRadius: 9,
+                  padding: "11px 0",
+                  fontSize: 14,
+                  fontWeight: 700,
+                  cursor: "pointer"
+                },
+                children: "Get Started"
+              }
+            ) })
+          ]
+        }
+      )
+    }
+  );
+}
+async function loader({
+  request
+}) {
+  const {
+    session
+  } = await authenticate.admin(request);
+  const store = await prisma.store.findUnique({
+    where: {
+      shop: session.shop
+    }
+  });
+  return {
+    hasSeenWelcome: (store == null ? void 0 : store.hasSeenWelcome) ?? true,
+    videoUrl: process.env.WELCOME_VIDEO_URL || null
+  };
+}
+async function action({
+  request
+}) {
+  const {
+    session
+  } = await authenticate.admin(request);
+  await prisma.store.update({
+    where: {
+      shop: session.shop
+    },
+    data: {
+      hasSeenWelcome: true
+    }
+  });
+  return null;
+}
 const app__index = UNSAFE_withComponentProps(function HomePage() {
-  return /* @__PURE__ */ jsx(Page, {
+  const {
+    hasSeenWelcome,
+    videoUrl
+  } = useLoaderData();
+  const dismissFetcher = useFetcher();
+  const [modalOpen, setModalOpen] = useState(!hasSeenWelcome);
+  const closeModal = () => {
+    setModalOpen(false);
+    if (!hasSeenWelcome) {
+      dismissFetcher.submit({}, {
+        method: "post"
+      });
+    }
+  };
+  return /* @__PURE__ */ jsxs(Page, {
     title: "Product Configurator",
     subtitle: "Let customers personalise your products with custom colors, text & logos",
-    children: /* @__PURE__ */ jsxs(BlockStack, {
+    secondaryActions: [{
+      content: "Watch demo",
+      onAction: () => setModalOpen(true)
+    }],
+    children: [/* @__PURE__ */ jsx(WelcomeModal, {
+      open: modalOpen,
+      onClose: closeModal,
+      videoUrl
+    }), /* @__PURE__ */ jsxs(BlockStack, {
       gap: "600",
       children: [/* @__PURE__ */ jsxs(Layout, {
         children: [/* @__PURE__ */ jsx(Layout.Section, {
@@ -24456,7 +25017,7 @@ const app__index = UNSAFE_withComponentProps(function HomePage() {
           })]
         })
       })]
-    })
+    })]
   });
 });
 const FEATURES = [{
@@ -24580,11 +25141,13 @@ function StepRow({
     })]
   });
 }
-const route26 = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
+const route25 = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
   __proto__: null,
-  default: app__index
+  action,
+  default: app__index,
+  loader
 }, Symbol.toStringTag, { value: "Module" }));
-const serverManifest = { "entry": { "module": "/assets/entry.client-CBG9gWr7.js", "imports": ["/assets/chunk-4N6VE7H7-MeczOpdo.js", "/assets/index-rpFy-Kpx.js", "/assets/index-CoSDG3-6.js"], "css": [] }, "routes": { "root": { "id": "root", "parentId": void 0, "path": "", "index": void 0, "caseSensitive": void 0, "hasAction": false, "hasLoader": false, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasDefaultExport": true, "hasErrorBoundary": false, "module": "/assets/root-B-uol03-.js", "imports": ["/assets/chunk-4N6VE7H7-MeczOpdo.js", "/assets/index-rpFy-Kpx.js", "/assets/index-CoSDG3-6.js"], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/webhooks.customers.data_request": { "id": "routes/webhooks.customers.data_request", "parentId": "root", "path": "webhooks/customers/data_request", "index": void 0, "caseSensitive": void 0, "hasAction": true, "hasLoader": false, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasDefaultExport": false, "hasErrorBoundary": false, "module": "/assets/webhooks.customers.data_request-l0sNRNKZ.js", "imports": [], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/apps.product-configurator.data": { "id": "routes/apps.product-configurator.data", "parentId": "root", "path": "apps/product-configurator/data", "index": void 0, "caseSensitive": void 0, "hasAction": false, "hasLoader": true, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasDefaultExport": false, "hasErrorBoundary": false, "module": "/assets/apps.product-configurator.data-l0sNRNKZ.js", "imports": [], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/webhooks.app.scopes_update": { "id": "routes/webhooks.app.scopes_update", "parentId": "root", "path": "webhooks/app/scopes_update", "index": void 0, "caseSensitive": void 0, "hasAction": true, "hasLoader": false, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasDefaultExport": false, "hasErrorBoundary": false, "module": "/assets/webhooks.app.scopes_update-l0sNRNKZ.js", "imports": [], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/webhooks.customers.redact": { "id": "routes/webhooks.customers.redact", "parentId": "root", "path": "webhooks/customers/redact", "index": void 0, "caseSensitive": void 0, "hasAction": true, "hasLoader": false, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasDefaultExport": false, "hasErrorBoundary": false, "module": "/assets/webhooks.customers.redact-l0sNRNKZ.js", "imports": [], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/webhooks.app.uninstalled": { "id": "routes/webhooks.app.uninstalled", "parentId": "root", "path": "webhooks/app/uninstalled", "index": void 0, "caseSensitive": void 0, "hasAction": true, "hasLoader": false, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasDefaultExport": false, "hasErrorBoundary": false, "module": "/assets/webhooks.app.uninstalled-l0sNRNKZ.js", "imports": [], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/configurator.$productId": { "id": "routes/configurator.$productId", "parentId": "root", "path": "configurator/:productId", "index": void 0, "caseSensitive": void 0, "hasAction": false, "hasLoader": true, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasDefaultExport": true, "hasErrorBoundary": false, "module": "/assets/configurator._productId-C1UHOBQ-.js", "imports": ["/assets/chunk-4N6VE7H7-MeczOpdo.js", "/assets/ThreeViewer-q71IQWiO.js", "/assets/configurator-aOLPiopV.js", "/assets/index-CoSDG3-6.js"], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/configurator.$productId.checkout": { "id": "routes/configurator.$productId.checkout", "parentId": "routes/configurator.$productId", "path": "checkout", "index": void 0, "caseSensitive": void 0, "hasAction": true, "hasLoader": false, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasDefaultExport": false, "hasErrorBoundary": false, "module": "/assets/configurator._productId.checkout-l0sNRNKZ.js", "imports": [], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/webhooks.shop.redact": { "id": "routes/webhooks.shop.redact", "parentId": "root", "path": "webhooks/shop/redact", "index": void 0, "caseSensitive": void 0, "hasAction": true, "hasLoader": false, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasDefaultExport": false, "hasErrorBoundary": false, "module": "/assets/webhooks.shop.redact-l0sNRNKZ.js", "imports": [], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/upload-preview": { "id": "routes/upload-preview", "parentId": "root", "path": "upload-preview", "index": void 0, "caseSensitive": void 0, "hasAction": true, "hasLoader": false, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasDefaultExport": false, "hasErrorBoundary": false, "module": "/assets/upload-preview-l0sNRNKZ.js", "imports": [], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/auth.login": { "id": "routes/auth.login", "parentId": "root", "path": "auth/login", "index": void 0, "caseSensitive": void 0, "hasAction": true, "hasLoader": true, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasDefaultExport": true, "hasErrorBoundary": false, "module": "/assets/route-DtiItvyd.js", "imports": ["/assets/chunk-4N6VE7H7-MeczOpdo.js", "/assets/AppProxyProvider-BoWZ72lL.js"], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/_index": { "id": "routes/_index", "parentId": "root", "path": void 0, "index": true, "caseSensitive": void 0, "hasAction": false, "hasLoader": true, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasDefaultExport": true, "hasErrorBoundary": false, "module": "/assets/route-22iwizJ1.js", "imports": ["/assets/chunk-4N6VE7H7-MeczOpdo.js"], "css": ["/assets/route-Xpdx9QZl.css"], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/auth.$": { "id": "routes/auth.$", "parentId": "root", "path": "auth/*", "index": void 0, "caseSensitive": void 0, "hasAction": false, "hasLoader": true, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasDefaultExport": false, "hasErrorBoundary": false, "module": "/assets/auth._-l0sNRNKZ.js", "imports": [], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/app": { "id": "routes/app", "parentId": "root", "path": "app", "index": void 0, "caseSensitive": void 0, "hasAction": false, "hasLoader": true, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasDefaultExport": true, "hasErrorBoundary": true, "module": "/assets/app-_Jf78N2h.js", "imports": ["/assets/chunk-4N6VE7H7-MeczOpdo.js", "/assets/AppProxyProvider-BoWZ72lL.js", "/assets/context-CC90ckuS.js"], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/app.configurator-setup.$productId": { "id": "routes/app.configurator-setup.$productId", "parentId": "routes/app", "path": "configurator-setup/:productId", "index": void 0, "caseSensitive": void 0, "hasAction": true, "hasLoader": true, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasDefaultExport": true, "hasErrorBoundary": false, "module": "/assets/app.configurator-setup._productId-ClIMR7oq.js", "imports": ["/assets/chunk-4N6VE7H7-MeczOpdo.js", "/assets/ThreeViewer-q71IQWiO.js", "/assets/configurator-aOLPiopV.js", "/assets/index-CoSDG3-6.js"], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/app.configurator-style.$productId": { "id": "routes/app.configurator-style.$productId", "parentId": "routes/app", "path": "configurator-style/:productId", "index": void 0, "caseSensitive": void 0, "hasAction": true, "hasLoader": true, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasDefaultExport": true, "hasErrorBoundary": false, "module": "/assets/app.configurator-style._productId-BNttGptw.js", "imports": ["/assets/chunk-4N6VE7H7-MeczOpdo.js", "/assets/Page-BH3Os2fx.js", "/assets/Banner-B9GlMWRw.js", "/assets/Divider-CWt5q4K2.js", "/assets/context-CC90ckuS.js", "/assets/index-rpFy-Kpx.js", "/assets/index-CoSDG3-6.js"], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/app.configurator.$productId": { "id": "routes/app.configurator.$productId", "parentId": "routes/app", "path": "configurator/:productId", "index": void 0, "caseSensitive": void 0, "hasAction": false, "hasLoader": true, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasDefaultExport": true, "hasErrorBoundary": false, "module": "/assets/app.configurator._productId-CB19yyZn.js", "imports": ["/assets/chunk-4N6VE7H7-MeczOpdo.js", "/assets/ThreeViewer-q71IQWiO.js", "/assets/configurator-aOLPiopV.js", "/assets/index-CoSDG3-6.js"], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/app.inventory.$productId": { "id": "routes/app.inventory.$productId", "parentId": "routes/app", "path": "inventory/:productId", "index": void 0, "caseSensitive": void 0, "hasAction": true, "hasLoader": true, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasDefaultExport": true, "hasErrorBoundary": false, "module": "/assets/app.inventory._productId-khdIU5eE.js", "imports": ["/assets/chunk-4N6VE7H7-MeczOpdo.js"], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/app.variants.$productId": { "id": "routes/app.variants.$productId", "parentId": "routes/app", "path": "variants/:productId", "index": void 0, "caseSensitive": void 0, "hasAction": true, "hasLoader": true, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasDefaultExport": true, "hasErrorBoundary": false, "module": "/assets/app.variants._productId-BUK0uvyy.js", "imports": ["/assets/chunk-4N6VE7H7-MeczOpdo.js", "/assets/configurator-aOLPiopV.js"], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/app.pricing.$productId": { "id": "routes/app.pricing.$productId", "parentId": "routes/app", "path": "pricing/:productId", "index": void 0, "caseSensitive": void 0, "hasAction": true, "hasLoader": true, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasDefaultExport": true, "hasErrorBoundary": false, "module": "/assets/app.pricing._productId-C1zpZJR7.js", "imports": ["/assets/chunk-4N6VE7H7-MeczOpdo.js", "/assets/configurator-aOLPiopV.js"], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/app.product-picker": { "id": "routes/app.product-picker", "parentId": "routes/app", "path": "product-picker", "index": void 0, "caseSensitive": void 0, "hasAction": true, "hasLoader": false, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasDefaultExport": true, "hasErrorBoundary": false, "module": "/assets/app.product-picker-KbEzVuvJ.js", "imports": ["/assets/chunk-4N6VE7H7-MeczOpdo.js", "/assets/Page-BH3Os2fx.js", "/assets/Banner-B9GlMWRw.js", "/assets/Divider-CWt5q4K2.js", "/assets/context-CC90ckuS.js", "/assets/index-rpFy-Kpx.js", "/assets/index-CoSDG3-6.js"], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/app.upload-image": { "id": "routes/app.upload-image", "parentId": "routes/app", "path": "upload-image", "index": void 0, "caseSensitive": void 0, "hasAction": true, "hasLoader": false, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasDefaultExport": false, "hasErrorBoundary": false, "module": "/assets/app.upload-image-l0sNRNKZ.js", "imports": [], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/app.additional": { "id": "routes/app.additional", "parentId": "routes/app", "path": "additional", "index": void 0, "caseSensitive": void 0, "hasAction": false, "hasLoader": false, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasDefaultExport": true, "hasErrorBoundary": false, "module": "/assets/app.additional-CB4TE1pb.js", "imports": ["/assets/chunk-4N6VE7H7-MeczOpdo.js"], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/app.upload-glb": { "id": "routes/app.upload-glb", "parentId": "routes/app", "path": "upload-glb", "index": void 0, "caseSensitive": void 0, "hasAction": true, "hasLoader": false, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasDefaultExport": false, "hasErrorBoundary": false, "module": "/assets/app.upload-glb-l0sNRNKZ.js", "imports": [], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/app.products": { "id": "routes/app.products", "parentId": "routes/app", "path": "products", "index": void 0, "caseSensitive": void 0, "hasAction": true, "hasLoader": true, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasDefaultExport": true, "hasErrorBoundary": false, "module": "/assets/app.products-C9l_ReZx.js", "imports": ["/assets/chunk-4N6VE7H7-MeczOpdo.js", "/assets/Page-BH3Os2fx.js", "/assets/context-CC90ckuS.js", "/assets/ProductIcon.svg-DT7AoPQ4.js", "/assets/index-rpFy-Kpx.js", "/assets/index-CoSDG3-6.js"], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/app.settings": { "id": "routes/app.settings", "parentId": "routes/app", "path": "settings", "index": void 0, "caseSensitive": void 0, "hasAction": true, "hasLoader": true, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasDefaultExport": true, "hasErrorBoundary": false, "module": "/assets/app.settings-n39XoXHG.js", "imports": ["/assets/chunk-4N6VE7H7-MeczOpdo.js", "/assets/Page-BH3Os2fx.js", "/assets/Banner-B9GlMWRw.js", "/assets/Divider-CWt5q4K2.js", "/assets/context-CC90ckuS.js", "/assets/index-rpFy-Kpx.js", "/assets/index-CoSDG3-6.js"], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/app._index": { "id": "routes/app._index", "parentId": "routes/app", "path": void 0, "index": true, "caseSensitive": void 0, "hasAction": false, "hasLoader": false, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasDefaultExport": true, "hasErrorBoundary": false, "module": "/assets/app._index-DIdDpSfw.js", "imports": ["/assets/chunk-4N6VE7H7-MeczOpdo.js", "/assets/Page-BH3Os2fx.js", "/assets/ProductIcon.svg-DT7AoPQ4.js", "/assets/Divider-CWt5q4K2.js", "/assets/context-CC90ckuS.js", "/assets/index-rpFy-Kpx.js", "/assets/index-CoSDG3-6.js"], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 } }, "url": "/assets/manifest-6b1d0343.js", "version": "6b1d0343", "sri": void 0 };
+const serverManifest = { "entry": { "module": "/assets/entry.client-CBG9gWr7.js", "imports": ["/assets/chunk-4N6VE7H7-MeczOpdo.js", "/assets/index-rpFy-Kpx.js", "/assets/index-CoSDG3-6.js"], "css": [] }, "routes": { "root": { "id": "root", "parentId": void 0, "path": "", "index": void 0, "caseSensitive": void 0, "hasAction": false, "hasLoader": false, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasDefaultExport": true, "hasErrorBoundary": false, "module": "/assets/root-B-uol03-.js", "imports": ["/assets/chunk-4N6VE7H7-MeczOpdo.js", "/assets/index-rpFy-Kpx.js", "/assets/index-CoSDG3-6.js"], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/webhooks.customers.data_request": { "id": "routes/webhooks.customers.data_request", "parentId": "root", "path": "webhooks/customers/data_request", "index": void 0, "caseSensitive": void 0, "hasAction": true, "hasLoader": false, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasDefaultExport": false, "hasErrorBoundary": false, "module": "/assets/webhooks.customers.data_request-l0sNRNKZ.js", "imports": [], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/apps.product-configurator.data": { "id": "routes/apps.product-configurator.data", "parentId": "root", "path": "apps/product-configurator/data", "index": void 0, "caseSensitive": void 0, "hasAction": false, "hasLoader": true, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasDefaultExport": false, "hasErrorBoundary": false, "module": "/assets/apps.product-configurator.data-l0sNRNKZ.js", "imports": [], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/webhooks.app.scopes_update": { "id": "routes/webhooks.app.scopes_update", "parentId": "root", "path": "webhooks/app/scopes_update", "index": void 0, "caseSensitive": void 0, "hasAction": true, "hasLoader": false, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasDefaultExport": false, "hasErrorBoundary": false, "module": "/assets/webhooks.app.scopes_update-l0sNRNKZ.js", "imports": [], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/webhooks.customers.redact": { "id": "routes/webhooks.customers.redact", "parentId": "root", "path": "webhooks/customers/redact", "index": void 0, "caseSensitive": void 0, "hasAction": true, "hasLoader": false, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasDefaultExport": false, "hasErrorBoundary": false, "module": "/assets/webhooks.customers.redact-l0sNRNKZ.js", "imports": [], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/webhooks.app.uninstalled": { "id": "routes/webhooks.app.uninstalled", "parentId": "root", "path": "webhooks/app/uninstalled", "index": void 0, "caseSensitive": void 0, "hasAction": true, "hasLoader": false, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasDefaultExport": false, "hasErrorBoundary": false, "module": "/assets/webhooks.app.uninstalled-l0sNRNKZ.js", "imports": [], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/configurator.$productId": { "id": "routes/configurator.$productId", "parentId": "root", "path": "configurator/:productId", "index": void 0, "caseSensitive": void 0, "hasAction": false, "hasLoader": true, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasDefaultExport": true, "hasErrorBoundary": false, "module": "/assets/configurator._productId-Dh3eFeAY.js", "imports": ["/assets/chunk-4N6VE7H7-MeczOpdo.js", "/assets/ThreeViewer-q71IQWiO.js", "/assets/configurator-aOLPiopV.js", "/assets/index-CoSDG3-6.js"], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/webhooks.shop.redact": { "id": "routes/webhooks.shop.redact", "parentId": "root", "path": "webhooks/shop/redact", "index": void 0, "caseSensitive": void 0, "hasAction": true, "hasLoader": false, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasDefaultExport": false, "hasErrorBoundary": false, "module": "/assets/webhooks.shop.redact-l0sNRNKZ.js", "imports": [], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/upload-preview": { "id": "routes/upload-preview", "parentId": "root", "path": "upload-preview", "index": void 0, "caseSensitive": void 0, "hasAction": true, "hasLoader": false, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasDefaultExport": false, "hasErrorBoundary": false, "module": "/assets/upload-preview-l0sNRNKZ.js", "imports": [], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/auth.login": { "id": "routes/auth.login", "parentId": "root", "path": "auth/login", "index": void 0, "caseSensitive": void 0, "hasAction": true, "hasLoader": true, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasDefaultExport": true, "hasErrorBoundary": false, "module": "/assets/route-DtiItvyd.js", "imports": ["/assets/chunk-4N6VE7H7-MeczOpdo.js", "/assets/AppProxyProvider-BoWZ72lL.js"], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/_index": { "id": "routes/_index", "parentId": "root", "path": void 0, "index": true, "caseSensitive": void 0, "hasAction": false, "hasLoader": true, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasDefaultExport": true, "hasErrorBoundary": false, "module": "/assets/route-22iwizJ1.js", "imports": ["/assets/chunk-4N6VE7H7-MeczOpdo.js"], "css": ["/assets/route-Xpdx9QZl.css"], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/auth.$": { "id": "routes/auth.$", "parentId": "root", "path": "auth/*", "index": void 0, "caseSensitive": void 0, "hasAction": false, "hasLoader": true, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasDefaultExport": false, "hasErrorBoundary": false, "module": "/assets/auth._-l0sNRNKZ.js", "imports": [], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/app": { "id": "routes/app", "parentId": "root", "path": "app", "index": void 0, "caseSensitive": void 0, "hasAction": false, "hasLoader": true, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasDefaultExport": true, "hasErrorBoundary": true, "module": "/assets/app-_Jf78N2h.js", "imports": ["/assets/chunk-4N6VE7H7-MeczOpdo.js", "/assets/AppProxyProvider-BoWZ72lL.js", "/assets/context-CC90ckuS.js"], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/app.configurator-setup.$productId": { "id": "routes/app.configurator-setup.$productId", "parentId": "routes/app", "path": "configurator-setup/:productId", "index": void 0, "caseSensitive": void 0, "hasAction": true, "hasLoader": true, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasDefaultExport": true, "hasErrorBoundary": false, "module": "/assets/app.configurator-setup._productId-DCGnTy6G.js", "imports": ["/assets/chunk-4N6VE7H7-MeczOpdo.js", "/assets/index-rpFy-Kpx.js", "/assets/ThreeViewer-q71IQWiO.js", "/assets/configurator-aOLPiopV.js", "/assets/index-CoSDG3-6.js"], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/app.configurator-style.$productId": { "id": "routes/app.configurator-style.$productId", "parentId": "routes/app", "path": "configurator-style/:productId", "index": void 0, "caseSensitive": void 0, "hasAction": true, "hasLoader": true, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasDefaultExport": true, "hasErrorBoundary": false, "module": "/assets/app.configurator-style._productId-BNttGptw.js", "imports": ["/assets/chunk-4N6VE7H7-MeczOpdo.js", "/assets/Page-BH3Os2fx.js", "/assets/Banner-B9GlMWRw.js", "/assets/Divider-CWt5q4K2.js", "/assets/context-CC90ckuS.js", "/assets/index-rpFy-Kpx.js", "/assets/index-CoSDG3-6.js"], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/app.configurator.$productId": { "id": "routes/app.configurator.$productId", "parentId": "routes/app", "path": "configurator/:productId", "index": void 0, "caseSensitive": void 0, "hasAction": false, "hasLoader": true, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasDefaultExport": true, "hasErrorBoundary": false, "module": "/assets/app.configurator._productId-D_j19p8c.js", "imports": ["/assets/chunk-4N6VE7H7-MeczOpdo.js", "/assets/ThreeViewer-q71IQWiO.js", "/assets/configurator-aOLPiopV.js", "/assets/index-CoSDG3-6.js"], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/app.inventory.$productId": { "id": "routes/app.inventory.$productId", "parentId": "routes/app", "path": "inventory/:productId", "index": void 0, "caseSensitive": void 0, "hasAction": true, "hasLoader": true, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasDefaultExport": true, "hasErrorBoundary": false, "module": "/assets/app.inventory._productId-khdIU5eE.js", "imports": ["/assets/chunk-4N6VE7H7-MeczOpdo.js"], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/app.variants.$productId": { "id": "routes/app.variants.$productId", "parentId": "routes/app", "path": "variants/:productId", "index": void 0, "caseSensitive": void 0, "hasAction": true, "hasLoader": true, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasDefaultExport": true, "hasErrorBoundary": false, "module": "/assets/app.variants._productId-BUK0uvyy.js", "imports": ["/assets/chunk-4N6VE7H7-MeczOpdo.js", "/assets/configurator-aOLPiopV.js"], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/app.pricing.$productId": { "id": "routes/app.pricing.$productId", "parentId": "routes/app", "path": "pricing/:productId", "index": void 0, "caseSensitive": void 0, "hasAction": true, "hasLoader": true, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasDefaultExport": true, "hasErrorBoundary": false, "module": "/assets/app.pricing._productId-C1zpZJR7.js", "imports": ["/assets/chunk-4N6VE7H7-MeczOpdo.js", "/assets/configurator-aOLPiopV.js"], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/app.product-picker": { "id": "routes/app.product-picker", "parentId": "routes/app", "path": "product-picker", "index": void 0, "caseSensitive": void 0, "hasAction": true, "hasLoader": false, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasDefaultExport": true, "hasErrorBoundary": false, "module": "/assets/app.product-picker-KbEzVuvJ.js", "imports": ["/assets/chunk-4N6VE7H7-MeczOpdo.js", "/assets/Page-BH3Os2fx.js", "/assets/Banner-B9GlMWRw.js", "/assets/Divider-CWt5q4K2.js", "/assets/context-CC90ckuS.js", "/assets/index-rpFy-Kpx.js", "/assets/index-CoSDG3-6.js"], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/app.upload-image": { "id": "routes/app.upload-image", "parentId": "routes/app", "path": "upload-image", "index": void 0, "caseSensitive": void 0, "hasAction": true, "hasLoader": false, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasDefaultExport": false, "hasErrorBoundary": false, "module": "/assets/app.upload-image-l0sNRNKZ.js", "imports": [], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/app.additional": { "id": "routes/app.additional", "parentId": "routes/app", "path": "additional", "index": void 0, "caseSensitive": void 0, "hasAction": false, "hasLoader": false, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasDefaultExport": true, "hasErrorBoundary": false, "module": "/assets/app.additional-CB4TE1pb.js", "imports": ["/assets/chunk-4N6VE7H7-MeczOpdo.js"], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/app.upload-glb": { "id": "routes/app.upload-glb", "parentId": "routes/app", "path": "upload-glb", "index": void 0, "caseSensitive": void 0, "hasAction": true, "hasLoader": false, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasDefaultExport": false, "hasErrorBoundary": false, "module": "/assets/app.upload-glb-l0sNRNKZ.js", "imports": [], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/app.products": { "id": "routes/app.products", "parentId": "routes/app", "path": "products", "index": void 0, "caseSensitive": void 0, "hasAction": true, "hasLoader": true, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasDefaultExport": true, "hasErrorBoundary": false, "module": "/assets/app.products-C9l_ReZx.js", "imports": ["/assets/chunk-4N6VE7H7-MeczOpdo.js", "/assets/Page-BH3Os2fx.js", "/assets/context-CC90ckuS.js", "/assets/ProductIcon.svg-DT7AoPQ4.js", "/assets/index-rpFy-Kpx.js", "/assets/index-CoSDG3-6.js"], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/app.settings": { "id": "routes/app.settings", "parentId": "routes/app", "path": "settings", "index": void 0, "caseSensitive": void 0, "hasAction": true, "hasLoader": true, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasDefaultExport": true, "hasErrorBoundary": false, "module": "/assets/app.settings-n39XoXHG.js", "imports": ["/assets/chunk-4N6VE7H7-MeczOpdo.js", "/assets/Page-BH3Os2fx.js", "/assets/Banner-B9GlMWRw.js", "/assets/Divider-CWt5q4K2.js", "/assets/context-CC90ckuS.js", "/assets/index-rpFy-Kpx.js", "/assets/index-CoSDG3-6.js"], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 }, "routes/app._index": { "id": "routes/app._index", "parentId": "routes/app", "path": void 0, "index": true, "caseSensitive": void 0, "hasAction": true, "hasLoader": true, "hasClientAction": false, "hasClientLoader": false, "hasClientMiddleware": false, "hasDefaultExport": true, "hasErrorBoundary": false, "module": "/assets/app._index-4wdKVrTz.js", "imports": ["/assets/chunk-4N6VE7H7-MeczOpdo.js", "/assets/Page-BH3Os2fx.js", "/assets/ProductIcon.svg-DT7AoPQ4.js", "/assets/Divider-CWt5q4K2.js", "/assets/context-CC90ckuS.js", "/assets/index-rpFy-Kpx.js", "/assets/index-CoSDG3-6.js"], "css": [], "clientActionModule": void 0, "clientLoaderModule": void 0, "clientMiddlewareModule": void 0, "hydrateFallbackModule": void 0 } }, "url": "/assets/manifest-b7734c64.js", "version": "b7734c64", "sri": void 0 };
 const assetsBuildDirectory = "build/client";
 const basename = "/";
 const future = { "unstable_optimizeDeps": false, "v8_passThroughRequests": false, "unstable_trailingSlashAwareDataRequests": false, "unstable_previewServerPrerendering": false, "v8_middleware": false, "v8_splitRouteModules": false, "v8_viteEnvironmentApi": false };
@@ -24651,21 +25214,13 @@ const routes = {
     caseSensitive: void 0,
     module: route6
   },
-  "routes/configurator.$productId.checkout": {
-    id: "routes/configurator.$productId.checkout",
-    parentId: "routes/configurator.$productId",
-    path: "checkout",
-    index: void 0,
-    caseSensitive: void 0,
-    module: route7
-  },
   "routes/webhooks.shop.redact": {
     id: "routes/webhooks.shop.redact",
     parentId: "root",
     path: "webhooks/shop/redact",
     index: void 0,
     caseSensitive: void 0,
-    module: route8
+    module: route7
   },
   "routes/upload-preview": {
     id: "routes/upload-preview",
@@ -24673,7 +25228,7 @@ const routes = {
     path: "upload-preview",
     index: void 0,
     caseSensitive: void 0,
-    module: route9
+    module: route8
   },
   "routes/auth.login": {
     id: "routes/auth.login",
@@ -24681,7 +25236,7 @@ const routes = {
     path: "auth/login",
     index: void 0,
     caseSensitive: void 0,
-    module: route10
+    module: route9
   },
   "routes/_index": {
     id: "routes/_index",
@@ -24689,7 +25244,7 @@ const routes = {
     path: void 0,
     index: true,
     caseSensitive: void 0,
-    module: route11
+    module: route10
   },
   "routes/auth.$": {
     id: "routes/auth.$",
@@ -24697,7 +25252,7 @@ const routes = {
     path: "auth/*",
     index: void 0,
     caseSensitive: void 0,
-    module: route12
+    module: route11
   },
   "routes/app": {
     id: "routes/app",
@@ -24705,7 +25260,7 @@ const routes = {
     path: "app",
     index: void 0,
     caseSensitive: void 0,
-    module: route13
+    module: route12
   },
   "routes/app.configurator-setup.$productId": {
     id: "routes/app.configurator-setup.$productId",
@@ -24713,7 +25268,7 @@ const routes = {
     path: "configurator-setup/:productId",
     index: void 0,
     caseSensitive: void 0,
-    module: route14
+    module: route13
   },
   "routes/app.configurator-style.$productId": {
     id: "routes/app.configurator-style.$productId",
@@ -24721,7 +25276,7 @@ const routes = {
     path: "configurator-style/:productId",
     index: void 0,
     caseSensitive: void 0,
-    module: route15
+    module: route14
   },
   "routes/app.configurator.$productId": {
     id: "routes/app.configurator.$productId",
@@ -24729,7 +25284,7 @@ const routes = {
     path: "configurator/:productId",
     index: void 0,
     caseSensitive: void 0,
-    module: route16
+    module: route15
   },
   "routes/app.inventory.$productId": {
     id: "routes/app.inventory.$productId",
@@ -24737,7 +25292,7 @@ const routes = {
     path: "inventory/:productId",
     index: void 0,
     caseSensitive: void 0,
-    module: route17
+    module: route16
   },
   "routes/app.variants.$productId": {
     id: "routes/app.variants.$productId",
@@ -24745,7 +25300,7 @@ const routes = {
     path: "variants/:productId",
     index: void 0,
     caseSensitive: void 0,
-    module: route18
+    module: route17
   },
   "routes/app.pricing.$productId": {
     id: "routes/app.pricing.$productId",
@@ -24753,7 +25308,7 @@ const routes = {
     path: "pricing/:productId",
     index: void 0,
     caseSensitive: void 0,
-    module: route19
+    module: route18
   },
   "routes/app.product-picker": {
     id: "routes/app.product-picker",
@@ -24761,7 +25316,7 @@ const routes = {
     path: "product-picker",
     index: void 0,
     caseSensitive: void 0,
-    module: route20
+    module: route19
   },
   "routes/app.upload-image": {
     id: "routes/app.upload-image",
@@ -24769,7 +25324,7 @@ const routes = {
     path: "upload-image",
     index: void 0,
     caseSensitive: void 0,
-    module: route21
+    module: route20
   },
   "routes/app.additional": {
     id: "routes/app.additional",
@@ -24777,7 +25332,7 @@ const routes = {
     path: "additional",
     index: void 0,
     caseSensitive: void 0,
-    module: route22
+    module: route21
   },
   "routes/app.upload-glb": {
     id: "routes/app.upload-glb",
@@ -24785,7 +25340,7 @@ const routes = {
     path: "upload-glb",
     index: void 0,
     caseSensitive: void 0,
-    module: route23
+    module: route22
   },
   "routes/app.products": {
     id: "routes/app.products",
@@ -24793,7 +25348,7 @@ const routes = {
     path: "products",
     index: void 0,
     caseSensitive: void 0,
-    module: route24
+    module: route23
   },
   "routes/app.settings": {
     id: "routes/app.settings",
@@ -24801,7 +25356,7 @@ const routes = {
     path: "settings",
     index: void 0,
     caseSensitive: void 0,
-    module: route25
+    module: route24
   },
   "routes/app._index": {
     id: "routes/app._index",
@@ -24809,7 +25364,7 @@ const routes = {
     path: void 0,
     index: true,
     caseSensitive: void 0,
-    module: route26
+    module: route25
   }
 };
 const allowedActionOrigins = false;
