@@ -334,6 +334,23 @@ function getQuestionIcon(q: Question) {
   return badge(meta?.bg ?? "#9ca3af", meta?.icon ?? "?");
 }
 
+// A question can point at Behind the Scene layers two ways: the older
+// single `linkedLayerId` (plain color questions) or the newer `applyOn`
+// list (thumbnail questions' Apply on picker). This merges both into one
+// list so the Questions list can show every linked layer nested under its
+// question, instead of only being discoverable from the Behind the Scene
+// section further down.
+function getLinkedLayersFor(q: Question, layers: LayerConfig[]): { id: string; name: string }[] {
+  const ids = new Set<string>();
+  const linkedLayerId = (q as any).linkedLayerId as string | undefined;
+  if (linkedLayerId) ids.add(linkedLayerId);
+  for (const id of ((q as any).applyOn as string[] | undefined) ?? []) ids.add(id);
+  return Array.from(ids)
+    .map((id) => layers.find((l) => l.id === id))
+    .filter((l): l is LayerConfig => !!l)
+    .map((l) => ({ id: l.id, name: l.name }));
+}
+
 // ─── Shared side-opening row menu (portal, viewport-clamped) ──────────────────
 // Used by row "⋮" menus (QuestionRow, LayerRow) so the menu never opens
 // downward into a clipped scroll container and never runs off the viewport.
@@ -4520,6 +4537,15 @@ export default function BuilderPage() {
                               onDragStart={() => handleQDragStart(child.id)} onDragOver={(e) => handleQDragOver(e, child.id)}
                               onDrop={() => handleQDrop(child.id)} onDragEnd={handleQDragEnd}
                             />
+                            {/* Same nested Behind the Scene layer links as the top-level
+                                question rows below, just indented for a grouped child. */}
+                            {getLinkedLayersFor(child, layers).map((ll) => (
+                              <div key={ll.id} onClick={() => setSelected({ kind: "layer", id: ll.id })}
+                                style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 10px 5px 40px", cursor: "pointer", background: selected?.id === ll.id ? "#eff6ff" : "transparent" }}>
+                                <span style={{ fontSize: 11 }}>🗂</span>
+                                <span style={{ fontSize: 12, color: "#6b7280" }}>↳ {ll.name}</span>
+                              </div>
+                            ))}
                           </div>
                         );
                       })}
@@ -4543,6 +4569,17 @@ export default function BuilderPage() {
                         style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 10px 5px 40px", cursor: "pointer", background: editingPrintAreaId === pa.id ? "#eff6ff" : "transparent" }}>
                         <span style={{ fontSize: 11 }}>🖨</span>
                         <span style={{ fontSize: 12, color: "#6b7280" }}>↳ {pa.name}</span>
+                      </div>
+                    ))}
+                    {/* Behind the Scene layers this question applies its answer onto
+                        (via linkedLayerId or the Apply on picker's applyOn list),
+                        nested here so they're visible without scrolling down to the
+                        separate Behind the Scene section. */}
+                    {getLinkedLayersFor(q, layers).map((ll) => (
+                      <div key={ll.id} onClick={() => setSelected({ kind: "layer", id: ll.id })}
+                        style={{ display: "flex", alignItems: "center", gap: 6, padding: "5px 10px 5px 40px", cursor: "pointer", background: selected?.id === ll.id ? "#eff6ff" : "transparent" }}>
+                        <span style={{ fontSize: 11 }}>🗂</span>
+                        <span style={{ fontSize: 12, color: "#6b7280" }}>↳ {ll.name}</span>
                       </div>
                     ))}
                   </div>
